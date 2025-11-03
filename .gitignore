@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+package-lock.json
+models/
+
+# Build output
+dist/
+build/
+
+# Old/backup files
+js/scene_less\ old.js
+js/scene_olds.js
+js/TutorialManager\ hardCodeObjTut.js
+js/TutorialManager_old.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+#stupid files
+asciiScreen.py
+TODO.md
+README.md

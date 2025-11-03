@@ -1,106 +1,350 @@
+#  Office 3D Forensic Demo
 
-## Panoramica
+Un ambiente 3D interattivo immersivo per l'insegnamento della **Digital Forensics** attraverso gamification. Un prototipo didattico innovativo che combina una scrivania virtuale, una console Linux simulata, e una serie di compiti investigativi progressivi.
 
-Questo prototipo è un ambiente 3D interattivo che simula un ufficio di investigazione forense, progettato per insegnare concetti di digital forensics attraverso meccaniche di gamification. L'applicazione permette agli utenti di muoversi in prima persona all'interno di un ufficio virtuale, interagire con oggetti significativi e completare una serie di task investigativi attraverso una console Linux simulata.
+**Demo Live:** [https://edoardomaniero.github.io/office3D-forensic-demo/](https://edoardomaniero.github.io/office3D-forensic-demo/)
 
-## URL di Accesso
+---
 
-Il prototipo è accessibile online al seguente URL:
-[https://edoardomaniero.github.io/office3D-forensic-demo/](https://edoardomaniero.github.io/office3D-forensic-demo/)
+##  Indice
 
-## Requisiti di Sistema
+- [Panoramica](#panoramica)
+- [Caratteristiche Principali](#caratteristiche-principali)
+- [Requisiti di Sistema](#requisiti-di-sistema)
+- [Come Iniziare](#come-iniziare)
+- [Controlli e Interfaccia](#controlli-e-interfaccia)
+- [Architettura](#architettura)
+- [Tecnologie](#tecnologie)
+- [Roadmap Futuri](#roadmap-futuri)
+- [Contributi e Feedback](#contributi-e-feedback)
 
-- **Browser**: Chrome, Firefox, Edge o Safari aggiornati all'ultima versione
-- **Hardware**: Scheda grafica con supporto WebGL
-- **Connessione Internet**: Necessaria per caricare le risorse 3D
-- **Input**: Tastiera e mouse
+---
 
-## Controlli
+##  Panoramica
 
-- **Movimento**: Tasti WASD
-- **Visuale**: Movimento del mouse
-- **Interazione**: Tasto E quando si è vicini a un oggetto interattivo
-- **Apertura console**: Tasto c
-- **Chiusura console**: Tasto ESC o pulsante X nell'interfaccia
+**Office 3D Forensic Demo** è un prototipo educativo che simula un ufficio di investigazione forense. Gli utenti:
+- Si muovono in **prima persona** all'interno di un ambiente 3D realistico
+- Interagiscono con **oggetti investigativi** e infrastrutture IT
+- Completano **task investigativi progressivi** usando una console Linux simulata
+- Apprendono i **fondamenti della digital forensics** in modo coinvolgente
 
-## Funzionalità Principali
+L'applicazione è progettata per:
+-  Studenti di cybersecurity e forensics digitali
+-  Istituti didattici e corsi universitari
+-  Professionisti che desiderano apprendere in modo interattivo
+
+---
+
+##  Caratteristiche Principali
 
 ### 1. Ambiente 3D Navigabile
-
-L'ambiente 3D rappresenta un ufficio forense con:
-- Scrivania con computer
-- Sedia ergonomica
-- Libreria con documenti forensi
-- Armadietto per prove
-- Finestra con illuminazione naturale
+Un ufficio forense completamente 3D con:
+-  Scrivania con computer e workstation
+-  Libreria con documenti investigativi
+-  Armadietti per prove e evidenze
+-  Infrastruttura IT (server, router, dispositivi di rete)
+-  Illuminazione dinamica e atmosfera realistica
 
 ### 2. Console Linux Simulata
-
-La console offre un'esperienza realistica con:
-- Supporto per comandi base di Linux (ls, cd, cat, help, task, clear)
-- Cronologia comandi navigabile con frecce Su/Giù
-- Autocompletamento con Tab
-- Copia/incolla (seleziona testo per copiare, Ctrl+V per incollare)
-- File system simulato con struttura gerarchica
+Una console interattiva che offre:
+-  Supporto per comandi essenziali di Linux: `ls`, `cd`, `cat`, `grep`, `task`, `help`, `clear`
+-  Cronologia comandi navigabile (frecce Su/Giù)
+-  Autocompletamento con Tab
+-  Copia/incolla (seleziona testo, Ctrl+V per incollare)
+-  File system simulato con struttura gerarchica realistica
 
 ### 3. Sistema di Task Progressivi
+Tre **scenari investigativi** indipendenti con task progressivi:
 
-Il prototipo include una sequenza di 6 task investigativi:
-1. Identificazione dell'IP dell'attaccante in un file di log
-2. Analisi di uno script di esfiltrazione dati
-3. Esame del traffico di rete per identificare la porta utilizzata
-4. Ricerca di servizi sospetti nel sistema
-5. Identificazione del server Command & Control
-6. Completamento dell'indagine e preparazione del report
+1. **File System Forensic** (6 task)
+   - Connettere hard disk esterno
+   - Listare dispositivi con `lsblk`
+   - Montare la partizione
+   - Esplorare il file system
+   - Leggere file di log sospetti
+   - Usare `grep` per estrarre informazioni critiche
 
-### 4. Elementi di Gamification
+2. **Network Forensic** (5 task)
+   - Connettersi a server remoto via SSH
+   - Listare log di sistema
+   - Leggere authentication log
+   - Cercare tentativi di accesso falliti
+   - Analizzare capture di traffico con tcpdump
 
-- **Progressione a livelli**: Task sequenziali di difficoltà crescente
-- **Feedback immediato**: Conferma visiva e testuale del completamento
-- **Narrazione coinvolgente**: Storia investigativa coerente
-- **Esplorazione**: Ambiente 3D navigabile che stimola la scoperta
-- **Obiettivi chiari**: Istruzioni precise visualizzate nell'interfaccia
+3. **Memory Forensic** (6 task)
+   - Connettere hard disk con memory dump
+   - Verificare dispositivi collegati
+   - Montare la partizione con dump
+   - Listare file di memoria
+   - Analizzare processi sospetti
+   - Usare Volatility per analisi avanzata
 
-## Tecnologie Utilizzate
+### 4. Elementi di Gamification (Base)
+-  **Progressione Lineare**: Task sequenziali con feedback immediato
+-  **Toast Notifications**: Notifiche visive per azioni completate e feedback
+-  **Narrazione Coerente**: Una storia investigativa realistica
+-  **Esplorazione Incentivata**: Ambiente 3D che invita alla scoperta
+-  **Istruzioni Chiare**: Obiettivi visibili nell'HUD in tempo reale
+-  **Tutorial Interattivo**: Guida iniziale per i nuovi utenti
 
-- **Frontend**: HTML5, CSS3, JavaScript
-- **Grafica 3D**: Babylon.js
-- **Console Simulata**: xterm.js con addon personalizzati
-- **Deployment**: GitHub Pages
+### 5. Sistema di Gestione Task
+-  HUD collassabile che mostra il task corrente
+-  Barra di progresso per il completamento
+-  Notifiche toast per feedback in tempo reale
+-  Gestione scenari tramite file JSON
 
-## Struttura del Codice
+---
+
+##  Requisiti di Sistema
+
+### Browser
+- Chrome/Chromium 100+
+- Firefox 100+
+- Safari 15+
+- Edge 100+
+
+### Hardware
+- **GPU**: Scheda grafica con supporto WebGL 2.0
+- **RAM**: Minimo 4GB (consigliati 8GB)
+- **Processore**: Dual-core moderno
+
+### Connessione
+- Banda minima: 5 Mbps (per caricamento risorse 3D)
+
+### Input
+-  Tastiera QWERTY
+-  Mouse o trackpad
+
+---
+
+##  Come Iniziare
+
+### Opzione 1: Demo Live (Consigliato)
+Visita semplicemente: [https://edoardomaniero.github.io/office3D-forensic-demo/](https://edoardomaniero.github.io/office3D-forensic-demo/)
+
+### Opzione 2: Installazione Locale
+
+#### Prerequisiti
+- Node.js 16+ e npm
+- Git
+
+#### Installazione
+```bash
+# Clone il repository
+git clone https://github.com/EdoardoManiero/office3D-forensic-demo.git
+cd office3D-forensic-demo
+
+# Installa dipendenze
+npm install
+
+# Avvia il server di sviluppo
+npm run dev
+
+# Accedi a http://localhost:5173
+```
+
+#### Build per Produzione
+```bash
+npm run build
+```
+
+---
+
+##  Controlli e Interfaccia
+
+### Navigazione
+| Tasto | Funzione |
+|-------|----------|
+| **W** | Avanti |
+| **A** | Sinistra |
+| **S** | Indietro |
+| **D** | Destra |
+| **Mouse** | Guarda attorno |
+
+### Interazione
+| Tasto | Funzione |
+|-------|----------|
+| **E** | Interagisci con oggetto (quando vicino) |
+| **C** | Apri/Chiudi console |
+| **ESC** | Chiudi console |
+| **Tab** | Autocompletamento console |
+
+### Console
+| Tasto | Funzione |
+|-------|----------|
+| **/** | Naviga cronologia comandi |
+| **Ctrl+V** | Incolla testo |
+| **Ctrl+C** | Cancella input |
+
+---
+
+##  Architettura
+
+### Struttura del Progetto
+```
+office3D-forensic-demo/
+ index.html                    # Punto di ingresso HTML
+ style.css                     # Stili globali
+
+ js/                           # Logica applicazione
+    main.js                   # Entry point e coordinamento
+    scene.js                  # Setup ambiente 3D e camera
+    interaction.js            # Gestione interazioni utente
+    console.js                # Console Linux simulata
+   
+    eventBus.js               # Sistema di event communication
+    taskManager.js            # Gestione dei task investigativi
+    taskHud.js                # UI del task HUD
+    TutorialManager.js        # Tutorial e guida iniziale
+    ScenarioIntroManager.js   # Introduzione scenari
+
+ models/                       # Asset 3D (formato .glb)
+    bookshelf.glb
+    ComputerTower.glb
+    Printer.glb
+    server_rack.glb
+    super_computer.glb
+    secret_lab*.glb           # Variazioni laboratorio
+
+ scenarios.json                # Definizione compiti/scenari
+ package.json                  # Dipendenze e build config
+ README.md                     # Questo file
+```
+
+### Flusso dell'Applicazione
+```
+main.js (bootstrap)
+    
+scene.js (3D setup)
+    
+interaction.js (event listeners)
+    
+taskManager.js (task flow)
+     console.js (command execution)
+     taskHud.js (UI update)
+     eventBus.js (communication)
+```
+
+### Sistema di Event Bus
+L'applicazione utilizza un **pattern Pub/Sub centralizzato** per la comunicazione tra moduli, eliminando dipendenze circolari:
+
+**Come Funziona:**
+- **Publish**: Un modulo emette un evento (es: `TASK_COMPLETED`)
+- **Subscribe**: Altri moduli si registrano per ascoltare l'evento
+- **Callback**: Il listener riceve i dati e reagisce di conseguenza
+
+**Esempi di Eventi Chiave:**
+```
+Rendering Layer  Logic Layer:
+  - MESH_CLICKED: Utente clicca su un oggetto 3D
+  - CONSOLE_COMMAND_EXECUTED: Comando eseguito nella console
+
+Logic Layer  UI Layer:
+  - TASK_COMPLETED: Task completato
+  - PROGRESS_UPDATED: Progresso aggiornato
+
+Logic Layer  Rendering Layer:
+  - SCENARIO_HIGHLIGHTS_UPDATED: Evidenzia nuovi oggetti interattivi
+```
+
+**Vantaggi:**
+-  Moduli totalmente disaccoppiati
+-  Nessun import circolare tra file
+-  Facile aggiungere nuovi listener senza modificare il codice esistente
+-  Storico degli eventi per debugging
+
+---
+
+##  Tecnologie
+
+### Frontend
+- **HTML5** - Struttura semantica
+- **CSS3** - Layout Flexbox, Grid, animazioni
+- **JavaScript (ES6+)** - Logica applicazione
+
+### Rendering 3D
+- **Babylon.js 8.33** - Engine 3D WebGL
+  - Modelli 3D in formato glTF/GLB
+  - Illuminazione dinamica
+  - Gestione camera e fisica
+
+### Console Simulata
+- **xterm.js 5.3** - Emulatore terminale
+  - Addon fit per adattamento finestra
+  - Supporto per ANSI escape sequences
+
+### Build e Deploy
+- **Vite 7.1** - Build tool ultrarapido
+- **npm** - Package manager
+- **GitHub Pages** - Hosting
+
+### Versioning
+- **Git** - Version control
+- **Node.js 16+** - Runtime
+
+---
+
+##  Contributi e Feedback
+
+Apprezziamo molto il feedback della comunità!
+
+### Segnalare Bug
+Apri un [Issue su GitHub](https://github.com/EdoardoManiero/office3D-forensic-demo/issues) con:
+- Descrizione del problema
+- Passi per riprodurlo
+- Browser e versione utilizzati
+- Screenshot/log se disponibili
+
+### Suggerimenti e Feature Requests
+Condividi le tue idee aperendo una [Discussion](https://github.com/EdoardoManiero/office3D-forensic-demo/discussions)
+
+### Come Contribuire
+1. Fork il repository
+2. Crea un branch (`git checkout -b feature/NuovaFeature`)
+3. Commit le modifiche (`git commit -m 'Add: nuova feature'`)
+4. Push al branch (`git push origin feature/NuovaFeature`)
+5. Apri una Pull Request
+
+---
+
+##  Contatti e Supporto
+
+**Autore:** Edoardo Maniero  
+**Email:** [edoardomaniero@gmail.com](mailto:edoardomaniero@gmail.com)  
+**GitHub:** [@EdoardoManiero](https://github.com/EdoardoManiero)  
+**Repository:** [office3D-forensic-demo](https://github.com/EdoardoManiero/office3D-forensic-demo)
+
+---
+
+##  Licenza
+
+Questo progetto è distribuito sotto licenza **ISC**.
 
 ```
-office3D_demo/
-├── index.html          # Punto di ingresso dell'applicazione
-├── style.css           # Stili dell'interfaccia utente
-├── js/
-│   ├── scene.js        # Definizione dell'ambiente 3D
-│   ├── console.js      # Implementazione della console simulata
-│   ├── interaction.js  # Gestione delle interazioni utente
-│   └── main.js         # Inizializzazione e coordinamento
-└── models/
-    └── library.glb     # Modello 3D della libreria
+ISC License - Vedi LICENSE file per dettagli completi
 ```
 
-## Limitazioni Attuali
+---
 
-- Ambiente 3D limitato a una singola stanza
-- Set di comandi della console ridotto rispetto a un sistema Linux reale
-- Nessun sistema di punteggio o classifica
-- Nessuna integrazione con sistemi LMS esterni
+##  Risorse Educative Consigliate
 
-## Sviluppi Futuri
+### Digital Forensics
+- NIST Guidelines on Mobile Device Forensics
+- SANS Cyber Aces Forensic Challenges
+- Digital Forensics Research Lab (DFRL)
 
-- Aggiunta di più ambienti e scenari investigativi
-- Implementazione di un sistema di punteggio e badge
-- Integrazione con piattaforme didattiche tramite xAPI o SCORM
-- Modalità multiplayer per investigazioni collaborative
-- Espansione del set di comandi della console
-- Aggiunta di strumenti forensi più avanzati
+### Cybersecurity
+- TryHackMe Modules
+- HackTheBox Challenges
+- OverTheWire Wargames
 
-## Contatti e Supporto
+### 3D Web Development
+- Babylon.js Documentation
+- WebGL Best Practices
+- ThreeJS vs Babylon.js comparison
 
-Per domande, feedback o segnalazioni di problemi, contattare:
-- Email: [edoardomaniero@gmail.com](mailto:edoardomaniero@gmail.com)
-- GitHub: [github.com/EdoardoManiero](https://github.com/EdoardoManiero)
+---
+
+**Made with  for Digital Forensics Education**
+
+*Ultimo aggiornamento: 2025*
