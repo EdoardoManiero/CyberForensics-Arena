@@ -1,0 +1,31 @@
+{
+  "name": "office3d-forensic-demo",
+  "version": "1.0.0",
+  "description": "Questo prototipo    un ambiente 3D interattivo che simula un ufficio di investigazione forense, progettato per insegnare concetti di digital forensics attraverso meccaniche di gamification. L'applicazione permette agli utenti di muoversi in prima persona all'interno di un ufficio virtuale, interagire con oggetti significativi e completare una serie di task investigativi attraverso una console Linux simulata.",
+  "main": "scenarios.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EdoardoManiero/office3D-forensic-demo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/EdoardoManiero/office3D-forensic-demo/issues"
+  },
+  "homepage": "https://github.com/EdoardoManiero/office3D-forensic-demo#readme",
+  "dependencies": {
+    "@babylonjs/core": "^8.33.4",
+    "@babylonjs/loaders": "^8.33.4",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.12"
+  }
+}
