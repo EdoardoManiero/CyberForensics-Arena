@@ -1,0 +1,188 @@
+{
+  "_comment": "=== UTILITY FOR TEACHERS ===",
+  "_howToFindObjects": "Open browser console (F12) and type: window.listInteractableObjects()",
+  "_availableObjects": "Run listInteractableObjects() to see the updated list from current scene",
+  
+  "file_system_forensic": {
+    "id": "file_system_forensic",
+    "title": "File System Forensic",
+    "description": "Analyze storage devices and find the evidence",
+    "introduction": "A suspicious hard disk has been seized. You must mount it, examine the file system, and find the hidden evidence. Use Linux commands to discover what happened.",
+    "interactableObjects": ["HD1-01_HD-1_0", "Laptop"],
+    "tasks": [
+      {
+        "id": "fs_task_1",
+        "title": "Connect the hard disk to the workstation",
+        "details": "Click on the hard disk to physically connect it to the forensic PC",
+        "checkType": "interaction",
+        "interactionTarget": "HD1-01_HD-1_0",
+        "onInteract": {
+          "action": "attach_device",
+          "deviceName": "sdb",
+          "deviceType": "disk",
+          "message": " Hard disk connected as /dev/sdb\\nUse 'lsblk' to display available devices",
+          "mountContent": {
+            "suspicious.log": "2024-10-15 03:45:12 - Unauthorized access attempt\\n2024-10-15 03:45:34 - Login from 192.168.1.50\\n2024-10-15 03:47:21 - File system modified: /etc/shadow\\npassword: forensic2024",
+            "deleted_files.txt": "Recovered files:\\n- secret_document.pdf (deleted 2024-10-15 04:12)\\n- evidence.docx (deleted 2024-10-15 04:13)",
+            "system_info.txt": "System: Ubuntu 22.04 LTS\\nKernel: 5.15.0-89-generic\\nLast boot: 2024-10-15 03:30:00"
+          }
+        }
+      },
+      {
+        "id": "fs_task_2",
+        "title": "List connected devices",
+        "details": "Use 'lsblk' to see available disks",
+        "checkCommand": "lsblk",
+        "checkArgs": []
+      },
+      {
+        "id": "fs_task_3",
+        "title": "Mount the device",
+        "details": "Use 'mount /dev/sdb1 /mnt/evidence' to mount the partition",
+        "checkCommand": "mount",
+        "checkArgs": ["/dev/sdb1", "/mnt/evidence"]
+      },
+      {
+        "id": "fs_task_4",
+        "title": "Explore the contents",
+        "details": "Use 'ls /mnt/evidence' to see files on the disk",
+        "checkCommand": "ls",
+        "checkArgs": ["/mnt/evidence"]
+      },
+      {
+        "id": "fs_task_5",
+        "title": "Search for suspicious files",
+        "details": "Use 'cat /mnt/evidence/suspicious.log' to read the log",
+        "checkCommand": "cat",
+        "checkArgs": ["/mnt/evidence/suspicious.log"]
+      },
+      {
+        "id": "fs_task_6",
+        "title": "Search for password in the log",
+        "details": "Use 'grep password /mnt/evidence/suspicious.log'",
+        "checkCommand": "grep",
+        "checkArgs": ["password", "/mnt/evidence/suspicious.log"]
+      }
+    ]
+  },
+  
+  "network_forensic": {
+    "id": "network_forensic",
+    "title": "Network Forensic",
+    "description": "Analyze network traffic and system logs",
+    "introduction": "A server has been compromised. You need to analyze authentication logs and network traffic to identify the attacker. Connect to the server and investigate.",
+    "interactableObjects": ["Server", "Laptop"],
+    "tasks": [
+      {
+        "id": "net_task_1",
+        "title": "Connect to the remote server",
+        "details": "Click on the server to establish an SSH connection",
+        "checkType": "interaction",
+        "interactionTarget": "Server",
+        "onInteract": {
+          "action": "attach_device",
+          "deviceName": "remote_server",
+          "deviceType": "remote",
+          "message": " Connected to server 10.0.0.5 via SSH\\nLogs available. Use 'ls /var/log/network'",
+          "mountContent": {
+            "auth.log": "Oct 15 03:45:10 server sshd[1234]: Failed password for admin from 192.168.1.50\\nOct 15 03:45:15 server sshd[1234]: Failed password for admin from 192.168.1.50\\nOct 15 03:45:23 server sshd[1234]: Accepted password for admin from 192.168.1.50",
+            "network.pcap": "[Binary packet capture - 15MB]\\nHTTP requests to suspicious domains detected",
+            "firewall.log": "DENY 192.168.1.100 -> 10.0.0.5:3389 [RDP]\\nALLOW 192.168.1.50 -> 10.0.0.5:22 [SSH]"
+          }
+        }
+      },
+      {
+        "id": "net_task_2",
+        "title": "List system logs",
+        "details": "The remote server automatically mounts logs in /var/log/network",
+        "checkCommand": "ls",
+        "checkArgs": ["/var/log/network"]
+      },
+      {
+        "id": "net_task_3",
+        "title": "Read authentication logs",
+        "details": "Use 'cat /var/log/network/auth.log'",
+        "checkCommand": "cat",
+        "checkArgs": ["/var/log/network/auth.log"]
+      },
+      {
+        "id": "net_task_4",
+        "title": "Search for failed SSH attempts",
+        "details": "Use 'grep \"Failed password\" /var/log/network/auth.log'",
+        "checkCommand": "grep",
+        "checkArgs": ["Failed password", "/var/log/network/auth.log"]
+      },
+      {
+        "id": "net_task_5",
+        "title": "Analyze packet capture",
+        "details": "Use 'tcpdump' to see captured traffic statistics",
+        "checkCommand": "tcpdump",
+        "checkArgs": []
+      }
+    ]
+  },
+  
+  "memory_forensic": {
+    "id": "memory_forensic",
+    "title": "Memory Forensic",
+    "description": "Analyze RAM memory dump to find artifacts",
+    "introduction": "A RAM memory dump contains traces of malware. Analyze it using forensic tools to discover what malicious processes were running.",
+    "interactableObjects": ["HD2-01_HD-2_0", "Laptop"],
+    "tasks": [
+      {
+        "id": "mem_task_1",
+        "title": "Connect the HD with memory dump",
+        "details": "Click on the hard disk containing the RAM dump",
+        "checkType": "interaction",
+        "interactionTarget": "HD2-01",
+        "onInteract": {
+          "action": "attach_device",
+          "deviceName": "sdc",
+          "deviceType": "disk",
+          "size": "16G",
+          "message": " Device connected as /dev/sdc\\nContains 8GB memory dump",
+          "mountContent": {
+            "memory.dmp": "[Binary memory dump - 8GB]\\nWindows 10 x64 memory image",
+            "process_list.txt": "PID 1234 - suspicious.exe\\nPID 5678 - malware.dll\\nPID 9012 - keylogger.sys\\nPID 4321 - backdoor.exe",
+            "registry_hives.txt": "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\\n- Malware: C:\\\\Windows\\\\Temp\\\\evil.exe"
+          }
+        }
+      },
+      {
+        "id": "mem_task_2",
+        "title": "Verify devices",
+        "details": "Use 'lsblk' to confirm the connected device",
+        "checkCommand": "lsblk",
+        "checkArgs": []
+      },
+      {
+        "id": "mem_task_3",
+        "title": "Mount the device",
+        "details": "Use 'mount /dev/sdc1 /mnt/memdump'",
+        "checkCommand": "mount",
+        "checkArgs": ["/dev/sdc1", "/mnt/memdump"]
+      },
+      {
+        "id": "mem_task_4",
+        "title": "List dump files",
+        "details": "Use 'ls /mnt/memdump'",
+        "checkCommand": "ls",
+        "checkArgs": ["/mnt/memdump"]
+      },
+      {
+        "id": "mem_task_5",
+        "title": "Analyze processes",
+        "details": "Use 'cat /mnt/memdump/process_list.txt'",
+        "checkCommand": "cat",
+        "checkArgs": ["/mnt/memdump/process_list.txt"]
+      },
+      {
+        "id": "mem_task_6",
+        "title": "Use Volatility for advanced analysis",
+        "details": "Use 'volatility' to extract artifacts from memory",
+        "checkCommand": "volatility",
+        "checkArgs": []
+      }
+    ]
+  }
+}
