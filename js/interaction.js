@@ -327,8 +327,15 @@ export function setupInteractions(scene, camera) {
       return;
     }
 
-    // C toggles console open
+    // C toggles console open - but block during tutorial steps 0-2 (before step 3 "Open Console")
     if (key === KEY_CODES.C) {
+      // Block C key during tutorial steps 0-2
+      if (window.tutorial && window.tutorial.idx < 3 && !window.tutorial._done) {
+        event.preventDefault();
+        console.log('C key blocked during tutorial steps 0-2');
+        return;
+      }
+      
       event.preventDefault();
       console.log('C key pressed - requesting console open');
       eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
