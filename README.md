@@ -98,10 +98,10 @@ Tre **scenari investigativi** indipendenti con task progressivi:
 ##  Requisiti di Sistema
 
 ### Browser
-- Chrome/Chromium 100+
-- Firefox 100+
-- Safari 15+
-- Edge 100+
+- Chrome/Chromium 
+- Firefox 
+- Safari 
+- Edge 
 
 ### Hardware
 - **GPU**: Scheda grafica con supporto WebGL 2.0
@@ -199,12 +199,7 @@ office3D-forensic-demo/
     ScenarioIntroManager.js   # Introduzione scenari
 
  models/                       # Asset 3D (formato .glb)
-    bookshelf.glb
-    ComputerTower.glb
-    Printer.glb
-    server_rack.glb
-    super_computer.glb
-    secret_lab*.glb           # Variazioni laboratorio
+    secret_lab.glb             # Laboratorio forense
 
  scenarios.json                # Definizione compiti/scenari
  package.json                  # Dipendenze e build config
@@ -345,6 +340,6 @@ ISC License - Vedi LICENSE file per dettagli completi
 
 ---
 
-**Made with  for Digital Forensics Education**
+**Made with Love for Digital Forensics Education**
 
 *Ultimo aggiornamento: 2025*
