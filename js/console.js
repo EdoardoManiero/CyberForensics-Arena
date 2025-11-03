@@ -1043,6 +1043,12 @@ export function initConsole() {
     HistoryManager.loadFromStorage();
     registerBuiltinCommands();
 
+    // Ensure console starts hidden
+    const consoleContainer = document.getElementById('consoleContainer');
+    if (consoleContainer) {
+      consoleContainer.style.display = 'none';
+    }
+
     const closeBtn = document.getElementById('closeConsoleBtn');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => toggleConsoleVisibility(false));
