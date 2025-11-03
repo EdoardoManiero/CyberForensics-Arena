@@ -1,74 +1,405 @@
-const interactionHint = document.getElementById("interactionHint");
+/**
+ * interaction.js - User Interaction Management (RENDERING LAYER)
+ * 
+ * Handles mouse hover effects, clicking, keyboard input, and mesh interactions.
+ * Emits events for logic and UI layers to handle.
+ * 
+ * ARCHITECTURAL NOTE:
+ * - This is a RENDERING LAYER component
+ * - ONLY imports from other rendering layer (scene.js) and event bus
+ * - Does NOT import from Logic (taskManager) or UI (console, taskHud) layers
+ * - Communicates via events: MESH_CLICKED, CONSOLE_TOGGLE, MESH_HOVERED, MESH_HOVER_END
+ */
+
+import * as BABYLON from '@babylonjs/core';
+import { highlightLayer, permanentHighlightedMeshes, setCurrentHoveredMesh, clearCurrentHoveredMesh } from './scene.js';
+import { eventBus, Events } from './eventBus.js';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const HINT_ELEMENT_ID = 'interactionHint';
+const CROSSHAIR_ELEMENT_ID = 'crosshair';
+const CANVAS_ELEMENT_ID = 'renderCanvas';
+const CONSOLE_CONTAINER_ID = 'consoleContainer';
+const XTERM_TEXTAREA_CLASS = 'xterm-helper-textarea';
+const TUTORIAL_OVERLAY_ID = 'tutorial-overlay';
+
+const HIGHLIGHT_COLOR = {
+  HOVER: new BABYLON.Color3(0, 0.3, 0),
+  DEFAULT: new BABYLON.Color3(0, 0, 0)
+};
+
+const KEY_CODES = {
+  E: 'e',
+  C: 'c',
+  ESCAPE: 'Escape',
+  W: 'w', A: 'a', S: 's', D: 'd',
+  ARROW_UP: 'ArrowUp',
+  ARROW_DOWN: 'ArrowDown',
+  ARROW_LEFT: 'ArrowLeft',
+  ARROW_RIGHT: 'ArrowRight'
+};
+
+// ============================================================================
+// STATE
+// ============================================================================
+
 let highlightedMesh = null;
+let sceneRef = null;  // Will be set by setupInteractions to access currentTask
+const interactionHint = document.getElementById(HINT_ELEMENT_ID);
 
-function setupInteractions(scene, camera) {
-    scene.onPointerObservable.add((pointerInfo) => {
-        switch (pointerInfo.type) {
-            case BABYLON.PointerEventTypes.POINTERMOVE:
-                const pickResultMove = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh.isPickable && mesh.name === "PC_Monitor");
-                if (pickResultMove.hit) {
-                    if (highlightedMesh !== pickResultMove.pickedMesh) {
-                        if (highlightedMesh) {
-                            // Optional: Remove highlight from previously highlighted mesh
-                            // highlightedMesh.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.1); // Reset to original
-                        }
-                        highlightedMesh = pickResultMove.pickedMesh;
-                        // Optional: Add highlight to current mesh
-                        // highlightedMesh.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.8); // Highlight color
-                        interactionHint.style.display = "block";
-                    }
-                } else {
-                    if (highlightedMesh) {
-                        // Optional: Remove highlight
-                        // highlightedMesh.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.1);
-                        interactionHint.style.display = "none";
-                        highlightedMesh = null;
-                    }
-                }
-                break;
+// ============================================================================
+// MESH CHECKING FUNCTIONS
+// ============================================================================
 
-            case BABYLON.PointerEventTypes.POINTERDOWN:
-                if (highlightedMesh && highlightedMesh.name === "PC_Monitor") {
-                    // Check if the console is already visible to prevent re-triggering if not desired
-                    if (document.getElementById("consoleContainer").style.display === "none") {
-                        toggleConsoleVisibility();
-                    }
-                }
-                break;
-        }
-    });
+/**
+ * Checks if a mesh is the PC/Monitor
+ * @param {BABYLON.Mesh} mesh - Mesh to check
+ * @returns {boolean} True if mesh is a PC
+ */
+function isPCMesh(mesh) {
+  if (!mesh) return false;
 
-    // Keyboard interaction for 'E' key
-    scene.onKeyboardObservable.add((kbInfo) => {
-        switch (kbInfo.type) {
-            case BABYLON.KeyboardEventTypes.KEYDOWN:
-                if (kbInfo.event.key === "e" || kbInfo.event.key === "E") {
-                    // Perform a pick to see if we are looking at the monitor
-                    const pickResultKey = scene.pick(scene.getEngine().getRenderWidth() / 2, scene.getEngine().getRenderHeight() / 2, (mesh) => mesh.isPickable && mesh.name === "PC_Monitor");
-                    if (pickResultKey.hit && pickResultKey.pickedMesh.name === "PC_Monitor") {
-                         if (document.getElementById("consoleContainer").style.display === "none") {
-                            toggleConsoleVisibility();
-                        }
-                    }
-                }
-                // Allow Esc to close console if it's open
-                if (kbInfo.event.key === "Escape") {
-                    if (document.getElementById("consoleContainer").style.display === "flex") {
-                        toggleConsoleVisibility();
-                    }
-                }
-                break;
-        }
-    });
+  const name = (mesh.name || '').toLowerCase();
+  const id = (mesh.id || '').toLowerCase();
+  const tag = mesh.metadata?.tag ? String(mesh.metadata.tag).toLowerCase() : '';
 
-    // Initial check for hint if camera starts pointing at monitor
-    // This might be better handled by a small delay or first move
-    setTimeout(() => {
-        const pickResultInitial = scene.pick(scene.getEngine().getRenderWidth() / 2, scene.getEngine().getRenderHeight() / 2, (mesh) => mesh.isPickable && mesh.name === "PC_Monitor");
-        if (pickResultInitial.hit && pickResultInitial.pickedMesh.name === "PC_Monitor") {
-            interactionHint.style.display = "block";
-            highlightedMesh = pickResultInitial.pickedMesh;
-        }
-    }, 500);
+  return mesh.isPickable && (
+    mesh.metadata?.isPC === true ||
+    tag.includes('pc') || tag.includes('computer') || tag.includes('laptop') ||
+    mesh.name === 'PC_Monitor' ||
+    /monitor|laptop|display|schermo|pc/.test(name) ||
+    /monitor|laptop|pc/.test(id)
+  );
 }
 
+/**
+ * Checks if two meshes match by name or ID
+ * @param {BABYLON.Mesh} mesh - Mesh to check
+ * @param {string} targetName - Target name to match
+ * @returns {boolean} True if mesh matches target
+ */
+export function isMeshMatching(mesh, targetName) {
+  if (!mesh || !targetName) return false;
+
+  const meshName = mesh.name || '';
+  const meshId = mesh.id || '';
+  const parentName = mesh.parent?.name || '';
+
+  // Exact match
+  if (meshName === targetName || meshId === targetName) return true;
+  if (parentName === targetName) return true;
+
+  // Starts with target (handles suffixes like _primitive0, _0)
+  if (meshName.startsWith(targetName + '_') ||
+      meshName.startsWith(targetName + '-') ||
+      meshId.startsWith(targetName + '_') ||
+      meshId.startsWith(targetName + '-')) {
+    return true;
+  }
+
+  // Contains target
+  if (meshName.includes(targetName) || meshId.includes(targetName)) {
+    return true;
+  }
+
+  // Metadata tag match
+  if (mesh.metadata?.tag === targetName) return true;
+
+  return false;
+}
+
+/**
+ * Checks if a mesh is interactable in the current context
+ * @param {BABYLON.Mesh} mesh - Mesh to check
+ * @returns {boolean} True if mesh is interactable
+ */
+function isInteractableMesh(mesh) {
+  if (!mesh || !mesh.isPickable) return false;
+
+  // Always allow PC interaction
+  if (isPCMesh(mesh)) return true;
+
+  // Check if mesh is in permanent highlights
+  if (permanentHighlightedMeshes?.some(permMesh =>
+    permMesh === mesh ||
+    permMesh === mesh.parent ||
+    mesh.name.startsWith(permMesh.name?.split('_')[0] || '')
+  )) {
+    return true;
+  }
+
+  // Check current task requirements via scene reference (attached by main.js)
+  const task = sceneRef?._currentTask?.();
+  if (task?.checkType === 'interaction' && task.interactionTarget) {
+    return isMeshMatching(mesh, task.interactionTarget);
+  }
+
+  return false;
+}
+
+// ============================================================================
+// CUSTOM INTERACTIONS
+// ============================================================================
+
+/**
+ * Handles custom interactions from task definitions via event bus
+ * NOTE: Custom interaction handling delegated to taskManager via MESH_CLICKED event
+ * The action object is passed in the event data for taskManager to process
+ * 
+ * This keeps the rendering layer focused only on input detection,
+ * not on the business logic of what happens when interaction occurs.
+ */
+
+// ============================================================================
+// STATE CHECKING HELPERS
+// ============================================================================
+
+/**
+ * Checks if tutorial overlay is blocking input
+ */
+function isTutorialGateOpen() {
+  const overlay = document.getElementById(TUTORIAL_OVERLAY_ID);
+  return overlay?.classList.contains('mode-gate') ?? false;
+}
+
+/**
+ * Checks if console is open
+ */
+function isConsoleOpen() {
+  const container = document.getElementById(CONSOLE_CONTAINER_ID);
+  return container?.style.display !== 'none' ?? false;
+}
+
+/**
+ * Checks if user is typing in xterm
+ */
+function isTypingInXterm() {
+  const element = document.activeElement;
+  return element?.classList?.contains(XTERM_TEXTAREA_CLASS) ?? false;
+}
+
+// ============================================================================
+// HIGHLIGHT MANAGEMENT
+// ============================================================================
+
+/**
+ * Updates hover highlight based on center screen pick
+ */
+function updateHighlightFromPointer() {
+  try {
+    // Find what's at screen center
+    const engine = scene.getEngine();
+    const centerX = engine.getRenderWidth() / 2;
+    const centerY = engine.getRenderHeight() / 2;
+    const pick = scene.pick(centerX, centerY, isInteractableMesh);
+    const pickedMesh = pick?.hit ? pick.pickedMesh : null;
+
+    const crosshair = document.getElementById(CROSSHAIR_ELEMENT_ID);
+
+    if (pickedMesh) {
+      // Pointing at something
+      if (interactionHint) interactionHint.style.display = 'block';
+
+      // Remove old highlight
+      if (highlightedMesh && highlightedMesh !== pickedMesh) {
+        highlightLayer.removeMesh(highlightedMesh);
+      }
+
+      // Add new highlight
+      highlightLayer.addMesh(pickedMesh, HIGHLIGHT_COLOR.HOVER);
+      highlightedMesh = pickedMesh;
+      setCurrentHoveredMesh(highlightedMesh);
+      crosshair?.classList.add('targeting');
+
+    } else {
+      // Pointing at nothing
+      if (interactionHint) interactionHint.style.display = 'none';
+
+      if (highlightedMesh) {
+        highlightLayer.removeMesh(highlightedMesh);
+      }
+
+      highlightedMesh = null;
+      clearCurrentHoveredMesh();
+      crosshair?.classList.remove('targeting');
+    }
+
+  } catch (error) {
+    console.error('Hover update error:', error);
+  }
+}
+
+// ============================================================================
+// PUBLIC API
+// ============================================================================
+
+/**
+ * Sets up all interaction handlers
+ * @param {BABYLON.Scene} scene - Babylon.js scene
+ * @param {BABYLON.Camera} camera - Active camera
+ */
+export function setupInteractions(scene, camera) {
+  // Make scene accessible to local functions
+  window.scene = scene;
+  sceneRef = scene;  // Store scene reference for isInteractableMesh to access currentTask
+
+  // ========== POINTER MOVEMENT & HOVER ==========
+  scene.onPointerObservable.add((pointerInfo) => {
+    if (isTutorialGateOpen()) return;
+
+    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
+      updateHighlightFromPointer();
+    }
+
+    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+      if (!highlightedMesh) return;
+
+      // Tutorial click handling
+      if (window.tutorial?.idx === 2 && !window.tutorial._done) {
+        console.log('Tutorial step: clicked interactable');
+        window.tutorial?.signalClickedInteractable?.();
+        return;
+      }
+
+      // PC interaction - emit CONSOLE_TOGGLE event instead of calling function
+      if (isPCMesh(highlightedMesh)) {
+        console.log('PC mesh clicked - requesting console open');
+        eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
+        window.tutorial?.signalConsoleOpen?.();
+        return;
+      }
+
+      // Task interaction - emit MESH_CLICKED event for logic layer to process
+      // The logic layer (taskManager) will handle task checking and advancement
+      console.log(`Mesh clicked: ${highlightedMesh?.name}`);
+      eventBus.emit(Events.MESH_CLICKED, {
+        mesh: highlightedMesh,
+        meshName: highlightedMesh?.name,
+        meshId: highlightedMesh?.id,
+        position: highlightedMesh?.position
+      });
+    }
+  });
+
+  // ========== KEYBOARD HANDLERS ==========
+
+  // E to interact with PC - emit event instead of calling toggleConsoleVisibility
+  function handleEKey(event) {
+    if (isTutorialGateOpen()) return;
+    if ((event.key || '').toLowerCase() !== KEY_CODES.E) return;
+    if (isConsoleOpen() && isTypingInXterm()) return;
+
+    try {
+      const engine = scene.getEngine();
+      const x = engine.getRenderWidth() / 2;
+      const y = engine.getRenderHeight() / 2;
+      const pick = scene.pick(x, y, isPCMesh);
+
+      if (pick?.hit) {
+        event.preventDefault();
+        console.log('E key pressed on PC mesh - requesting console open');
+        eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
+        window.tutorial?.signalInteract?.();
+        window.tutorial?.signalConsoleOpen?.();
+      }
+    } catch (error) {
+      console.warn('E key handler error:', error);
+    }
+  }
+
+  // C to toggle console, ESC to close - emit events instead of calling toggleConsoleVisibility
+  function handleConsoleLKeys(event) {
+    if (isTutorialGateOpen()) return;
+
+    const key = (event.key || '').toLowerCase();
+
+    // Terminal typing - only trap ESC
+    if (isConsoleOpen() && isTypingInXterm()) {
+      if (key === KEY_CODES.ESCAPE) {
+        event.preventDefault();
+        console.log('ESC key in terminal - requesting console close');
+        eventBus.emit(Events.CONSOLE_TOGGLE, { open: false });
+        document.getElementById(CANVAS_ELEMENT_ID)?.focus();
+      }
+      return;
+    }
+
+    // C toggles console open
+    if (key === KEY_CODES.C) {
+      event.preventDefault();
+      console.log('C key pressed - requesting console open');
+      eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
+      window.tutorial?.signalConsoleOpen?.();
+      return;
+    }
+
+    // ESC closes console
+    if (key === KEY_CODES.ESCAPE && isConsoleOpen()) {
+      event.preventDefault();
+      console.log('ESC key - requesting console close');
+      eventBus.emit(Events.CONSOLE_TOGGLE, { open: false });
+      document.getElementById(CANVAS_ELEMENT_ID)?.focus();
+    }
+  }
+
+  // Movement signal for tutorial
+  let movementSignaled = false;
+  function handleMovement(event) {
+    if (movementSignaled) return;
+
+    const key = (event.key || '').toUpperCase();
+    if ([KEY_CODES.W, KEY_CODES.A, KEY_CODES.S, KEY_CODES.D,
+          KEY_CODES.ARROW_UP, KEY_CODES.ARROW_DOWN,
+          KEY_CODES.ARROW_LEFT, KEY_CODES.ARROW_RIGHT].includes(key)) {
+      window.tutorial?.signalMoved?.();
+      movementSignaled = true;
+    }
+  }
+
+  // Register keyboard handlers
+  scene.onKeyboardObservable.add((kb) => {
+    if (kb.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+      handleEKey(kb.event);
+      handleMovement(kb.event);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    handleEKey(event);
+    handleConsoleLKeys(event);
+    handleMovement(event);
+  }, true);
+
+  // ========== CAMERA SETUP ==========
+  try {
+    const activeCamera = scene.activeCamera || camera;
+    if (activeCamera) {
+      activeCamera.keysUp = [87, 38]; // W, ArrowUp
+      activeCamera.keysDown = [83, 40]; // S, ArrowDown
+      activeCamera.keysLeft = [65, 37]; // A, ArrowLeft
+      activeCamera.keysRight = [68, 39]; // D, ArrowRight
+      activeCamera.attachControl(document.getElementById(CANVAS_ELEMENT_ID), true);
+    }
+  } catch (error) {
+    console.warn('Camera setup error:', error);
+  }
+
+  // ========== INITIAL HINT ==========
+  setTimeout(() => {
+    try {
+      const x = scene.getEngine().getRenderWidth() / 2;
+      const y = scene.getEngine().getRenderHeight() / 2;
+      const pick = scene.pick(x, y, isPCMesh);
+
+      if (pick?.hit) {
+        if (interactionHint) interactionHint.style.display = 'block';
+        highlightedMesh = pick.pickedMesh;
+      }
+    } catch (error) {
+      console.warn('Initial hint setup error:', error);
+    }
+  }, 600);
+}
