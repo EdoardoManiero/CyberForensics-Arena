@@ -26,28 +26,21 @@ body:not(.tutorial-grayscale) #renderCanvas {
 }
 
 
+/* Console styling - positioning controlled by inline styles in index.html */
 #consoleContainer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 40%; /* Altezza della console */
-    background-color: #1e1e1e;
-    border-top: 2px solid #555;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
     display: flex;
     flex-direction: column;
-    z-index: 1000;
 }
 
 #consoleHeader {
-    background-color: #333;
-    color: white;
-    padding: 5px 10px;
+    background-color: #111;
+    color: #eee;
+    padding: 6px 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-size: 0.9em;
+    border-bottom: 1px solid #222;
 }
 
 #consoleHeader span {
@@ -55,22 +48,24 @@ body:not(.tutorial-grayscale) #renderCanvas {
 }
 
 #closeConsoleBtn {
-    background-color: #d9534f;
-    color: white;
+    background-color: #666;
+    color: #eee;
     border: none;
-    padding: 3px 8px;
-    border-radius: 3px;
+    padding: 2px 6px;
+    border-radius: 2px;
     cursor: pointer;
+    font-size: 12px;
 }
 
 #closeConsoleBtn:hover {
-    background-color: #c9302c;
+    background-color: #888;
 }
 
 #terminal {
     flex-grow: 1;
     padding: 5px;
-    overflow-y: auto; /* Permette lo scroll se il contenuto    troppo */
+    overflow-y: auto;
+    background: #0a0a0a;
 }
 
 /* Stili per xterm.js (assicurati che il tema di xterm sia caricato correttamente) */
