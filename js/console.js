@@ -985,7 +985,7 @@ function registerBuiltinCommands() {
 // Console visibility - toggling between console and 3D view
 function isConsoleOpen() {
   const consoleContainer = document.getElementById('consoleContainer');
-  return consoleContainer && consoleContainer.style.display !== 'none';
+  return consoleContainer && consoleContainer.classList.contains('console-open');
 }
 
 function isTypingInXterm() {
@@ -998,12 +998,12 @@ export function toggleConsoleVisibility(force) {
   const wantOpen = (typeof force === 'boolean') ? force : !isConsoleOpen();
 
   if (wantOpen) {
-    consoleContainer.style.display = 'block';
+    consoleContainer.classList.add('console-open');
     document.exitPointerLock();
     TerminalManager.open();
     if (window.tutorial?.signalConsoleOpen) window.tutorial.signalConsoleOpen();
   } else {
-    consoleContainer.style.display = 'none';
+    consoleContainer.classList.remove('console-open');
     if (canvas) {
       canvas.focus();
       if (document.pointerLockElement !== canvas && canvas.requestPointerLock)
@@ -1043,10 +1043,10 @@ export function initConsole() {
     HistoryManager.loadFromStorage();
     registerBuiltinCommands();
 
-    // Ensure console starts hidden
+    // Ensure console starts hidden (use class-based control)
     const consoleContainer = document.getElementById('consoleContainer');
     if (consoleContainer) {
-      consoleContainer.style.display = 'none';
+      consoleContainer.classList.remove('console-open');
     }
 
     const closeBtn = document.getElementById('closeConsoleBtn');
