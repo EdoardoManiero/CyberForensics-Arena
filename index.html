@@ -1,45 +1,137 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo Ufficio Forense 3D</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Babylon.js -->
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-    <!-- xterm.js -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Demo Ufficio Forense 3D</title>
+  <link rel="stylesheet" href="style.css" />
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    html,body{height:100%;margin:0}
+    #renderCanvas{width:100%;height:100%;outline:none}
+    /* Tutorial overlay: il backdrop NON mangia input */
+    #tutorial-overlay{position:fixed;inset:0;display:none;z-index:9999;background:rgba(0,0,0,.6);pointer-events:none}
     
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    /* Normal tutorial steps: don't block gameplay input */
+    #tutorial-overlay.mode-run { pointer-events:none; }
+
+    /* Final-gate mode: block everything until user clicks Close */
+    #tutorial-overlay.mode-gate { pointer-events:auto; backdrop-filter: blur(4px); }
+    #tutorial-card{display:flex;align-items:flex-start;justify-content:center;min-height:100vh;padding-top:5vh;pointer-events:none}
+    #tutorial-overlay.mode-gate #tutorial-card{pointer-events:auto}
+    #shortcutHint{position:fixed;left:50%;bottom:68px;transform:translateX(-50%);z-index:3}
+    #consoleContainer{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:900px;max-width:95vw;height:520px;display:none;background:#0a0a0a;border:1px solid #222;z-index:10000}
+    #consoleHeader{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#111;color:#eee;border-bottom:1px solid #222}
+    #terminal{height:calc(100% - 38px)}
+      /* --- TASK HUD --- */
+    /* HUD Task: sempre dentro viewport, anche con notch/safe-area */
+    #taskDisplayContainer{
+    position: fixed !important;
+    top: 12px !important;
+    left: 12px !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    translate: none !important;     /* per eventuali translate CSS */
+    margin: 0 !important;
+    max-width: min(420px, calc(100vw - 24px));
+    z-index: 9000;
+   }
+
+
+
+    #taskDisplayContainer h4{ margin:0 0 6px 0; font-size:14px; font-weight:600; opacity:.8; }
+    #taskTitle{ margin:0 0 4px 0; font-size:16px; font-weight:700; }
+    #taskDetails{ margin:0; font-size:14px; opacity:.95; }
+    .task-progress-wrap{ margin-top:8px; height:6px; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden; }
+    .task-progress-bar{ height:100%; width:0%; background:#22c55e; transition:width .3s ease; }
+
+    #toastContainer{ position:fixed; right:18px; bottom:18px; z-index:10050; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+    .toast{ min-width:320px; max-width:420px; background:rgba(20,20,20,.94); color:#fff; border:1px solid rgba(255,255,255,.08);
+            border-radius:12px; padding:12px 14px; box-shadow:0 8px 28px rgba(0,0,0,.35); animation:toast-in .2s ease-out; }
+    .toast .title{ font-weight:700; margin:0 0 4px 0;}
+    .toast .desc{ margin:0; font-size:14px; opacity:.9;}
+    @keyframes toast-in{ from{transform:translateY(8px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+    
+
+    /* Console header piccolo fix (se vuoi) */
+    #consoleHeader{ user-select:none; }
+  </style>
 </head>
 <body>
-    <div id="taskDisplayContainer" style="display: none;">
-        <h4>Obiettivo Corrente:</h4>
-        <p id="currentTaskText"></p>
-    </div>
-    <div id="shortcutHint">
-    <div class="shortcut-icon">⌨️</div>
-    <div class="shortcut-text">Premi <span class="key">c</span> per aprire la Console,  Oppure punta il computer e schiaccia <span class="key">e</span></div>
-</div>
-
-    <canvas id="renderCanvas"></canvas>
-    <div id="consoleContainer" style="display: none;">
-        <div id="consoleHeader">
-            <span>Console Forense (Simulata)</span>
-            <button id="closeConsoleBtn">X</button>
+  <!-- TASK HUD  fancy + collapsabile -->
+  <div id="taskDisplayContainer" class="task-hud" style="display:none">
+    <!-- toggle CSS-only -->
+    <input id="taskHudCollapse" type="checkbox" class="task-hud__cbx" />
+    <div class="task-hud__card">
+      <div class="task-hud__header">
+        <div class="task-hud__titlewrap">
+          <i class="fa-solid fa-bullseye"></i>
+          <h4>Obiettivo Corrente</h4>
         </div>
-        <div id="terminal"></div>
-    </div>
-    <div id="interactionHint" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px;">
-        Premi 'E' per interagire
-    </div>
+        <label class="task-hud__toggle" for="taskHudCollapse" title="Riduci/espandi">
+          <i class="fa-solid fa-chevron-down"></i>
+        </label>
+      </div>
 
-    <script src="js/console.js"></script>
-    <script src="js/scene.js"></script>
-    <script src="js/interaction.js"></script>
-    <script src="js/main.js"></script>
+      <div class="task-hud__body">
+        <div id="taskTitle"   class="task-hud__main"></div>
+        <p   id="taskDetails" class="task-hud__sub"></p>
+
+        <div class="task-progress">
+          <div id="taskProgressBar" class="task-progress__bar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Toasts -->
+  <div id="toastContainer"></div>
+
+  <div id="shortcutHint">
+    <div class="shortcut-icon"></div>
+    <div class="shortcut-text">Press <span class="key">c</span> to open the Console, or point the computer and click on it.</div>
+  </div>
+
+  <!-- canvas con focus da tastiera -->
+  <canvas id="renderCanvas" tabindex="0"></canvas>
+  <div id="crosshair"></div>
+  
+  <div id="consoleContainer">
+    <div id="consoleHeader">
+      <span>Console Forense (Simulata)</span>
+      <button id="closeConsoleBtn">X</button>
+    </div>
+    <div id="terminal"></div>
+  </div>
+
+  <!-- <div id="interactionHint" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background-color:rgba(0,0,0,.7);color:#fff;padding:10px;border-radius:5px;">
+    Premi 'E' per interagire
+  </div> -->
+
+  <!-- Tutorial Overlay -->
+  <div id="tutorial-overlay">
+    <div id="tutorial-card">
+      <div id="tutorial-modal">
+        <h2 id="t-title" style="margin-top:0">Benvenuto</h2>
+        <p id="t-text">Muoviti con <b>WASD</b> e guarda col mouse.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button id="t-skip">Skip Tutorial</button>
+          <button id="t-next">Avanti</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+<!-- 
+  <script src="js/scene.js"></script>
+  <script src="js/interaction.js"></script>
+  <script src="js/TutorialManager.js"></script>
+  <script src="js/taskManager.js"></script>
+  <script src="js/taskHud.js"></script>  
+  <script src="js/console.js"></script>
+ -->
 </body>
 </html>
