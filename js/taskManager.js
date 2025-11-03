@@ -7,7 +7,6 @@
  * LAYER: Logic Layer
  * This module emits events that the UI and Rendering layers listen to.
  */
-
 import { eventBus, Events } from './eventBus.js';
 import { ScenarioIntroManager } from './ScenarioIntroManager.js';
 
@@ -15,7 +14,7 @@ import { ScenarioIntroManager } from './ScenarioIntroManager.js';
 // CONSTANTS
 // ============================================================================
 
-const SCENARIOS_PATH = './scenarios.json';
+const SCENARIOS_PATH = '../scenarios.json';
 const LOG_PREFIX = '[TaskManager]';
 
 // ============================================================================
