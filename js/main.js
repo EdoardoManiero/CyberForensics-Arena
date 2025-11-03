@@ -149,11 +149,16 @@ async function onTutorialComplete() {
     if (success) {
       console.log(`Started scenario: ${CONFIG.INITIAL_SCENARIO}`);
       updateScenarioHighlights();
+      
+      // Mount HUD but don't show it yet - it will be shown after "Start Investigation" is clicked
       TaskHud.mount();
-      TaskHud.show();
 
       // Show scenario introduction with modal
+      // HUD will be shown when user clicks "Start Investigation"
       await switchScenarioWithIntro(CONFIG.INITIAL_SCENARIO);
+      
+      // Show HUD after scenario intro is completed
+      TaskHud.show();
     } else {
       console.error('Failed to initialize task system');
     }

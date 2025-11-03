@@ -28,13 +28,17 @@ body:not(.tutorial-grayscale) #renderCanvas {
 
 /* Console styling - positioning controlled by inline styles in index.html */
 #consoleContainer {
-    display: flex;
     flex-direction: column;
 }
 
 /* Default: console hidden */
 #consoleContainer:not(.console-open) {
     display: none !important;
+}
+
+/* When console-open class is present, override inline display:none */
+#consoleContainer.console-open {
+    display: flex !important;
 }
 
 #consoleHeader {

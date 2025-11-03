@@ -134,6 +134,7 @@ function injectStyles() {
       z-index: 999999 !important;
       pointer-events: auto !important;
       animation: slideInRight 0.3s ease;
+      display: none !important;
     }
 
     @keyframes slideInRight {
@@ -483,12 +484,12 @@ export const TaskHud = {
   },
 
   show() {
-    console.log('TaskHud.show()');
     ensureRoot();
     if (hudState.root) {
-      hudState.root.style.display = 'block';
-      hudState.root.style.opacity = '1';
-      hudState.root.style.visibility = 'visible';
+      // Use setProperty with !important to override CSS !important
+      hudState.root.style.setProperty('display', 'block', 'important');
+      hudState.root.style.setProperty('opacity', '1', 'important');
+      hudState.root.style.setProperty('visibility', 'visible', 'important');
 
       if (!document.body.contains(hudState.root)) {
         document.body.appendChild(hudState.root);

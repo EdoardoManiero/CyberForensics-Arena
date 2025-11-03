@@ -170,7 +170,7 @@ function isTutorialGateOpen() {
  */
 function isConsoleOpen() {
   const container = document.getElementById(CONSOLE_CONTAINER_ID);
-  return container?.style.display !== 'none' ?? false;
+  return container?.classList.contains('console-open') ?? false;
 }
 
 /**
@@ -337,8 +337,9 @@ export function setupInteractions(scene, camera) {
       }
       
       event.preventDefault();
-      console.log('C key pressed - requesting console open');
-      eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
+      console.log('C key pressed - requesting console toggle');
+      // Don't specify 'open' - let console handle toggle logic
+      eventBus.emit(Events.CONSOLE_TOGGLE, {});
       window.tutorial?.signalConsoleOpen?.();
       return;
     }
