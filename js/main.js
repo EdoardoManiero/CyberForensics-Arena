@@ -138,6 +138,9 @@ async function onTutorialComplete() {
   try {
     console.log('Tutorial completed. Initializing task system...');
 
+    // Ensure console is closed after tutorial finishes
+    toggleConsoleVisibility(false);
+
     appState.scene.activeCamera?.attachControl(appState.canvas, true);
     appState.canvas.focus();
 
