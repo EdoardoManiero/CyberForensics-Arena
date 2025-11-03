@@ -1,123 +1,248 @@
-window.addEventListener('DOMContentLoaded', async () => {
-    const canvas = document.getElementById('renderCanvas');
+/**
+ * main.js - Application Entry Point
+ * 
+ * Initializes the 3D scene, console, interactions, and task system.
+ * Manages the overall application lifecycle and event handling.
+ */
+
+import * as BABYLON from '@babylonjs/core';
+import '@babylonjs/loaders';
+import { createScene, updateScenarioHighlights } from './scene.js';
+import { setupInteractions } from './interaction.js';
+import { initConsole, toggleConsoleVisibility } from './console.js';
+import { TutorialManager } from './TutorialManager.js';
+import { loadScenarios, initTaskSystem, currentTask, switchScenarioWithIntro } from './taskManager.js';
+import { TaskHud } from './taskHud.js';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const CONFIG = {
+  CANVAS_ID: 'renderCanvas',
+  INITIAL_SCENARIO: 'file_system_forensic',
+  ENGINE_OPTIONS: {
+    preserveDrawingBuffer: true,
+    stencil: true
+  },
+  POINTER_LOCK_OPTIONS: {
+    unadjustedMovement: true
+  }
+};
+
+// ============================================================================
+// STATE MANAGEMENT
+// ============================================================================
+
+const appState = {
+  engine: null,
+  scene: null,
+  canvas: null,
+  tutorial: null,
+  isInitialized: false
+};
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+/**
+ * Initializes the application on DOM content loaded
+ */
+async function initializeApp() {
+  try {
+    console.log('Starting application initialization...');
+
+    // Get canvas element
+    const canvas = document.getElementById(CONFIG.CANVAS_ID);
     if (!canvas) {
-        console.error("Render canvas not found!");
-        return;
+      throw new Error(`Canvas element with id '${CONFIG.CANVAS_ID}' not found`);
     }
+    appState.canvas = canvas;
 
-    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
-    if (!engine) {
-        console.error("Babylon.js engine could not be created!");
-        return;
-    }
-    window.engine = engine; // Make engine globally available if needed by other scripts, though it's better to pass it
+    // Create Babylon engine
+    appState.engine = new BABYLON.Engine(canvas, true, CONFIG.ENGINE_OPTIONS);
+    console.log('Babylon Engine created');
 
-    // Create Scene
-    const scene = createScene(engine, canvas); // createScene is defined in scene.js
-    if (!scene) {
-        console.error("Scene could not be created!");
-        return;
-    }
-    window.scene = scene; // Make scene globally available
+    // Create 3D scene
+    appState.scene = await createScene(appState.engine, canvas);
+    console.log('Scene created');
 
-    // Initialize Console (defined in console.js)
-    // Ensure console.js is loaded and initConsole is available
-    if (typeof initConsole === "function") {
-        initConsole(); 
+    // Attach currentTask getter to scene so rendering layer can access it
+    // This allows interaction.js to check task state without importing from taskManager
+    appState.scene._currentTask = currentTask;
+
+    // Setup interactions (mouse, keyboard, hover)
+    setupInteractions(appState.scene, appState.scene.activeCamera);
+    console.log('Interactions setup');
+
+    // Initialize console system
+    initConsole();
+    console.log('Console initialized');
+
+    // Setup pointer lock safety
+    installPointerLockSafety(appState.scene, canvas);
+    console.log('Pointer lock safety installed');
+
+    // Load scenarios
+    console.log('Loading scenarios...');
+    const scenarios = await loadScenarios();
+    if (!scenarios) {
+      console.error('Failed to load scenarios! Task system may not work.');
     } else {
-        console.error("initConsole function not found. Ensure console.js is loaded correctly.");
-        return;
+      console.log('Scenarios loaded');
     }
 
-    // Setup Interactions (defined in interaction.js)
-    // Ensure interaction.js is loaded and setupInteractions is available
-    if (typeof setupInteractions === "function") {
-        setupInteractions(scene, scene.activeCamera);
+    // Initialize tutorial
+    initializeTutorial();
+    console.log('Tutorial initialized');
+
+    // Setup render loop
+    appState.engine.runRenderLoop(() => appState.scene.render());
+    console.log('Render loop started');
+
+    // Setup window resize handler
+    setupResizeHandler();
+    console.log('Resize handler setup');
+
+    // Export globals for debugging
+    window.BABYLON = BABYLON;
+    window.app = appState;
+    window.toggleConsoleVisibility = toggleConsoleVisibility;
+
+    appState.isInitialized = true;
+    console.log('Application initialized successfully');
+
+  } catch (error) {
+    console.error('Application initialization failed:', error);
+    showFatalError(error.message);
+  }
+}
+
+/**
+ * Initializes the tutorial system
+ */
+function initializeTutorial() {
+  appState.tutorial = new TutorialManager({
+    scene: appState.scene,
+    onDone: onTutorialComplete
+  });
+
+  window.tutorial = appState.tutorial;
+}
+
+/**
+ * Callback when tutorial is completed
+ */
+async function onTutorialComplete() {
+  try {
+    console.log('Tutorial completed. Initializing task system...');
+
+    appState.scene.activeCamera?.attachControl(appState.canvas, true);
+    appState.canvas.focus();
+
+    const success = initTaskSystem(CONFIG.INITIAL_SCENARIO);
+
+    if (success) {
+      console.log(`Started scenario: ${CONFIG.INITIAL_SCENARIO}`);
+      updateScenarioHighlights();
+      TaskHud.mount();
+      TaskHud.show();
+
+      // Show scenario introduction with modal
+      await switchScenarioWithIntro(CONFIG.INITIAL_SCENARIO);
     } else {
-        console.error("setupInteractions function not found. Ensure interaction.js is loaded correctly.");
-        return;
+      console.error('Failed to initialize task system');
     }
 
-    // Render loop
-    engine.runRenderLoop(() => {
-        if (scene && scene.activeCamera) {
-            scene.render();
-        }
-    });
+  } catch (error) {
+    console.error('Error in tutorial completion:', error);
+  }
+}
 
-    // Resize event
-    window.addEventListener('resize', () => {
-        engine.resize();
-        if (window.fitAddon) { // fitAddon is from console.js, for xterm.js
-            window.fitAddon.fit();
-        }
-    });
-
-    // Pointer lock for FPS controls (optional, but good for immersion)
-    canvas.addEventListener("click", () => {
-        if (!engine.isPointerLock) {
-            // Check if console is visible. If so, don't lock pointer.
-            const consoleContainer = document.getElementById("consoleContainer");
-            if (consoleContainer && consoleContainer.style.display === "none") {
-                 engine.enterPointerlock();
-            }
-        }
-    });
-
-    document.addEventListener("pointerlockchange", () => {
-        if (document.pointerLockElement !== canvas) {
-            // console.log("Pointer unlocked");
-        } else {
-            // console.log("Pointer lockedc");
-        }
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.keyCode === 112) {
-            e.preventDefault();
-            
-            if (document.getElementById("consoleContainer").style.display === "none") {
-                toggleConsoleVisibility();
-            } else {
-                toggleConsoleVisibility();
-            }
-        }
-    });
-    
-
-    function showKeyFeedback() {
-        const feedback = document.createElement('div');
-        feedback.className = 'key-feedback';
-        
-        feedback.innerHTML = `
-            <div class="feedback-icon">✓</div>
-            <div class="feedback-text">Console attivata!</div>
-        `;
-        
-        document.body.appendChild(feedback);
-        
-        setTimeout(() => {
-            feedback.classList.add('fade-out');
-            setTimeout(() => {
-                if (document.body.contains(feedback)) {
-                    document.body.removeChild(feedback);
-                }
-            }, 500);
-        }, 1000);
+/**
+ * Sets up window resize handler
+ */
+function setupResizeHandler() {
+  window.addEventListener('resize', () => {
+    if (appState.engine) {
+      appState.engine.resize();
     }
-    
+    if (window.fitAddon) {
+      window.fitAddon.fit();
+    }
+  });
+}
 
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'c') {
-            e.preventDefault();
-            
-            if (document.getElementById("consoleContainer").style.display === "none") {
-                toggleConsoleVisibility();
-                showKeyFeedback();
-            } else {
-                toggleConsoleVisibility();
-            }
-        }
-    });
+/**
+ * Installs pointer lock safety handlers
+ */
+function installPointerLockSafety(scene, canvas) {
+  if (window.__pointerLockSafetyInstalled) return;
+  window.__pointerLockSafetyInstalled = true;
 
+  try {
+    scene.activeCamera?.attachControl(canvas, true);
+  } catch (error) {
+    console.warn('Initial camera attachment failed:', error);
+  }
+
+  canvas.addEventListener('click', () => {
+    if (document.pointerLockElement !== canvas) {
+      try {
+        scene.activeCamera?.attachControl(canvas, true);
+        canvas.focus();
+        canvas.requestPointerLock?.({ unadjustedMovement: true });
+      } catch (error) {
+        console.warn('Pointer lock re-attachment failed:', error);
+      }
+    }
+  }, true);
+
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement === canvas) {
+      canvas.focus();
+    }
+  }, true);
+
+  document.addEventListener('pointerlockerror', (error) => {
+    console.warn('Pointer lock error:', error);
+  }, true);
+}
+
+/**
+ * Displays a fatal error message to the user
+ */
+function showFatalError(message) {
+  const errorDiv = document.createElement('div');
+  errorDiv.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(200, 50, 50, 0.95);
+    color: white;
+    padding: 30px;
+    border-radius: 8px;
+    z-index: 10000;
+    max-width: 500px;
+    text-align: center;
+    font-family: monospace;
+  `;
+  errorDiv.innerHTML = `
+    <h2>Application Error</h2>
+    <p>${message}</p>
+    <p style="font-size: 0.9em; margin-top: 20px;">
+      Check the browser console for more details.
+    </p>
+  `;
+  document.body.appendChild(errorDiv);
+}
+
+window.addEventListener('DOMContentLoaded', initializeApp);
+
+window.addEventListener('beforeunload', () => {
+  if (appState.engine) {
+    appState.engine.dispose();
+  }
 });
-
