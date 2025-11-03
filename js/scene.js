@@ -18,7 +18,7 @@ import { eventBus, Events } from './eventBus.js';
 // ============================================================================
 
 const SCENE_CONFIG = {
-  MODEL_PATH: './models/',
+  MODEL_PATH: './public/models/',
   DEFAULT_MODEL: 'secret_lab.glb',
   AMBIENT_INTENSITY: 0.9,
   CAMERA_START_POS: new BABYLON.Vector3(0, 1.6, 1.5),
