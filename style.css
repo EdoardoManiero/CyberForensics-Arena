@@ -32,6 +32,11 @@ body:not(.tutorial-grayscale) #renderCanvas {
     flex-direction: column;
 }
 
+/* Default: console hidden */
+#consoleContainer:not(.console-open) {
+    display: none !important;
+}
+
 #consoleHeader {
     background-color: #111;
     color: #eee;
