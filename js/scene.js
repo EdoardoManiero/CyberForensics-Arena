@@ -355,26 +355,19 @@ function setupCameraSpawn(scene, camera) {
  * Sets up debugging utilities
  */
 function setupDebugUtilities(scene) {
-  // Respawn with R key
-  window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'r') {
-      safeRespawn(scene, scene.activeCamera);
-    }
-  });
-
   window.respawn = () => safeRespawn(scene, scene.activeCamera);
 
   // List interactable objects
   window.listInteractableObjects = () => listInteractableObjectsDebug(scene);
 
   console.log('Debug utilities installed');
-  console.log('Tips: Press R to respawn, call window.listInteractableObjects() for debug info');
+  console.log('Tips: Press Alt+Shift+R to respawn, call window.listInteractableObjects() for debug info');
 }
 
 /**
  * Respawns the camera at a safe position
  */
-function safeRespawn(scene, camera) {
+export function safeRespawn(scene, camera) {
   const spawn =
     scene.getTransformNodeByName('Spawn') ||
     scene.getTransformNodeByName('PlayerSpawn') ||
@@ -382,7 +375,7 @@ function safeRespawn(scene, camera) {
     scene.getMeshByName('PlayerSpawn');
 
   if (spawn) {
-    camera.position.copyFrom(spawn.getAbsolutePosition().add(new BABYLON.Vector3(0, 1.7, 0)));
+    camera.position.copyFrom(spawn.getAbsolutePosition().add(new BABYLON.Vector3(0, 0.6, 0)));
     console.log('Respawned at designated spawn point');
     return;
   }
