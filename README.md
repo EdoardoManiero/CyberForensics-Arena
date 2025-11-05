@@ -647,6 +647,16 @@ This project is distributed under the **ISC** license.
 
 See LICENSE file for full details.
 
+### 🎨 3D Model Attribution
+
+The 3D forensic environment (`secret_lab.glb`) is based on **"Flynn's Secret Lab - Tron Legacy"** by [an3xt](https://sketchfab.com/an3xt), available on [Sketchfab](https://sketchfab.com/3d-models/flynns-secret-lab-tron-legacy-0429196769e040bd84e84040daccc40a).
+
+**Original Model License**: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+**Modifications**: The original model has been adapted and modified using **Blender** to fit the forensic laboratory educational context.
+
+**Attribution Requirements**: The original work must be credited when used or distributed.
+
 ---
 
 ## Recommended Educational Resources
