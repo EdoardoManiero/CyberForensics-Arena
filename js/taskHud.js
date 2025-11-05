@@ -133,18 +133,19 @@ function injectStyles() {
     .task-hud {
       position: fixed !important;
       top: 20px !important;
-      right: 20px !important;
+      left: 20px !important;
+      right: auto !important;
       background: rgba(15, 15, 25, 0.95) !important;
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 12px;
       padding: 16px;
-      min-width: 340px;
-      max-width: 420px;
+      min-width: 280px;
+      max-width: min(35vw, 420px);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      z-index: 999999 !important;
+      z-index: 9000 !important;
       pointer-events: auto !important;
       animation: slideInRight 0.3s ease;
       display: none !important;
@@ -342,10 +343,17 @@ function injectStyles() {
     #${UI_CONFIG.TOAST_CONTAINER_ID} {
       position: fixed;
       top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 10000;
+      right: 20px;
+      left: auto;
+      transform: none;
+      z-index: 10050;
       pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 420px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
     }
 
     .toast {
@@ -362,6 +370,121 @@ function injectStyles() {
     @keyframes toastSlide {
       from { opacity: 0; transform: translateY(-20px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Responsive styles for different screen sizes - BIGGER HUD ON WIDER SCREENS */
+    /* Very large screens: 2400px+ - widest HUD */
+    @media (min-width: 2400px) {
+      .task-hud {
+        max-width: 24vw !important;
+        padding: 18px;
+        font-size: 1.05em;
+      }
+      .task-hud-header {
+        font-size: 1.2rem;
+      }
+    }
+
+    /* Large screens: 1900px - 2399px */
+    @media (min-width: 1900px) and (max-width: 2399px) {
+      .task-hud {
+        max-width: 22vw !important;
+        padding: 17px;
+        font-size: 1.02em;
+      }
+      .task-hud-header {
+        font-size: 1.15rem;
+      }
+    }
+
+    /* Large screens: 1600px - 1899px */
+    @media (min-width: 1600px) and (max-width: 1899px) {
+      .task-hud {
+        max-width: 20vw !important;
+        padding: 16px;
+        font-size: 1em;
+      }
+      .task-hud-header {
+        font-size: 1.1rem;
+      }
+    }
+
+    /* Medium-large screens: 1200px - 1599px */
+    @media (min-width: 1200px) and (max-width: 1599px) {
+      .task-hud {
+        max-width: 14vw !important;
+        padding: 14px;
+      }
+    }
+
+    /* Medium screens: 1024px - 1199px */
+    @media (min-width: 1024px) and (max-width: 1199px) {
+      .task-hud {
+        max-width: 12vw !important;
+        padding: 12px;
+        font-size: 0.95em;
+      }
+    }
+
+    /* Tablet/Small screens: 960px - 1023px */
+    @media (min-width: 960px) and (max-width: 1023px) {
+      .task-hud {
+        max-width: min(32vw, 340px) !important;
+        padding: 12px;
+        font-size: 0.95em;
+      }
+    }
+
+    /* Smaller tablets: 880px - 959px */
+    @media (min-width: 880px) and (max-width: 959px) {
+      .task-hud {
+        max-width: min(31vw, 320px) !important;
+        padding: 11px;
+        font-size: 0.93em;
+      }
+    }
+
+    /* Medium tablets: 800px - 879px */
+    @media (min-width: 800px) and (max-width: 879px) {
+      .task-hud {
+        max-width: min(30vw, 300px) !important;
+        padding: 11px;
+        font-size: 0.92em;
+      }
+    }
+
+    /* Smaller tablets: 720px - 799px */
+    @media (min-width: 720px) and (max-width: 799px) {
+      .task-hud {
+        max-width: min(29vw, 280px) !important;
+        padding: 10px;
+        font-size: 0.91em;
+      }
+    }
+
+    /* Small screens: 640px - 719px */
+    @media (min-width: 640px) and (max-width: 719px) {
+      .task-hud {
+        max-width: min(28vw, 260px) !important;
+        padding: 10px;
+        font-size: 0.9em;
+      }
+    }
+
+    /* Mobile screens: below 640px */
+    @media (max-width: 639px) {
+      .task-hud {
+        max-width: min(35vw, 240px) !important;
+        min-width: 240px;
+        padding: 9px;
+        font-size: 0.85em;
+      }
+      .task-hud-header {
+        font-size: 0.9rem;
+      }
+      .task-hud-content {
+        font-size: 0.8rem;
+      }
     }
   `;
 

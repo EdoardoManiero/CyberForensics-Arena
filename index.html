@@ -21,7 +21,7 @@
     #tutorial-card{display:flex;align-items:flex-start;justify-content:center;min-height:100vh;padding-top:5vh;pointer-events:none}
     #tutorial-overlay.mode-gate #tutorial-card{pointer-events:auto}
     #shortcutHint{position:fixed;left:50%;bottom:68px;transform:translateX(-50%);z-index:3}
-    #consoleContainer{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:900px;max-width:95vw;height:520px;display:none;background:#0a0a0a;border:1px solid #222;z-index:10000}
+    #consoleContainer{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:50vw;max-width:900px;height:55vh;max-height:500px;display:none;background:#0a0a0a;border:1px solid #222;z-index:9500}
     #consoleHeader{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#111;color:#eee;border-bottom:1px solid #222}
     #terminal{height:calc(100% - 38px)}
       /* --- TASK HUD --- */
@@ -35,7 +35,7 @@
     transform: none !important;
     translate: none !important;     /* per eventuali translate CSS */
     margin: 0 !important;
-    max-width: min(420px, calc(100vw - 24px));
+    width: clamp(100px, 12vw, 196px);
     z-index: 9000;
    }
 
@@ -48,11 +48,20 @@
     .task-progress-bar{ height:100%; width:0%; background:#22c55e; transition:width .3s ease; }
 
     #toastContainer{ position:fixed; right:18px; bottom:18px; z-index:10050; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
-    .toast{ min-width:320px; max-width:420px; background:rgba(20,20,20,.94); color:#fff; border:1px solid rgba(255,255,255,.08);
+    .toast{ min-width:280px; max-width:380px; background:rgba(20,20,20,.94); color:#fff; border:1px solid rgba(255,255,255,.08);
             border-radius:12px; padding:12px 14px; box-shadow:0 8px 28px rgba(0,0,0,.35); animation:toast-in .2s ease-out; }
     .toast .title{ font-weight:700; margin:0 0 4px 0;}
     .toast .desc{ margin:0; font-size:14px; opacity:.9;}
     @keyframes toast-in{ from{transform:translateY(8px); opacity:0;} to{transform:translateY(0); opacity:1;} }
+    
+    /* Note: Task HUD responsiveness is handled by taskHud.js injected styles */
+    
+    /* Very small screens 640px - 767px */
+    @media (max-width: 767px) {
+      #consoleContainer { width: 85vw; height: 55vh; min-height: 220px; }
+      #toastContainer { right: 12px; bottom: 350px; max-width: calc(100vw - 24px); }
+      #taskDisplayContainer { width: clamp(100px, 12vw, 196px); }
+    }
     
 
     /* Console header piccolo fix (se vuoi) */
