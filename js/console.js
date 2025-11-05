@@ -82,7 +82,14 @@ const VFSManager = {
             'dump.raw': this.makeFile('[Binary memory dump]')
           }
         },
-        tmp: { type: 'dir', children: {} }
+        mnt: { type: 'dir', children: {} },
+        tmp: { type: 'dir', children: {} },
+        var: {
+          type: 'dir',
+          children: {
+            log: { type: 'dir', children: {} }
+          }
+        }
       }
     };
   },
@@ -148,11 +155,45 @@ const VFSManager = {
     const node = this.getNode(dirPath);
     if (!node || node.type !== 'dir') return [];
     return Object.keys(node.children).filter(name => name.startsWith(prefix));
+  },
+
+  /**
+   * Automatically mounts device content to a specific path
+   * Used by task manager to mount remote devices
+   */
+  mountDeviceContent(mountPath, content) {
+    console.log('[VFSManager] Mounting device at:', mountPath, 'with content keys:', Object.keys(content || {}));
+    
+    const pathParts = mountPath.split('/').filter(Boolean);
+    let current = this.root;
+
+    // Create directory structure
+    for (const part of pathParts) {
+      if (!current.children) current.children = {};
+      if (!current.children[part]) {
+        current.children[part] = { type: 'dir', children: {} };
+        console.log('[VFSManager] Created directory:', part);
+      }
+      current = current.children[part];
+    }
+
+    console.log('[VFSManager] Directory structure created. Current node:', current);
+
+    // Add device content as files
+    if (content && current.children) {
+      for (const [name, data] of Object.entries(content)) {
+        current.children[name] = this.makeFile(data);
+        console.log('[VFSManager] Added file:', name);
+      }
+    }
+    
+    console.log('[VFSManager] Mount complete. Directory contents:', Object.keys(current.children || {}));
   }
 };
 
 // Registry for all available shell commands
 const CommandRegistry = new Map();
+const CustomCommandsRegistry = new Set(); // Track custom commands for cleanup
 
 function registerCommand(name, handler) {
   CommandRegistry.set(name, handler);
@@ -164,6 +205,51 @@ function getCommand(name) {
 
 function getAllCommands() {
   return Array.from(CommandRegistry.keys());
+}
+
+/**
+ * Registers custom commands from scenario definition
+ * @param {Array} customCommands - Array of command definitions from scenario
+ */
+function registerCustomCommands(customCommands) {
+  if (!Array.isArray(customCommands)) {
+    console.warn('[Console] Invalid customCommands format');
+    return;
+  }
+
+  customCommands.forEach(cmd => {
+    if (!cmd.name) {
+      console.warn('[Console] Custom command missing name property');
+      return;
+    }
+
+    const cmdName = cmd.name;
+    const output = cmd.output || '';
+    const description = cmd.description || cmd.name;
+
+    registerCommand(cmdName, (args) => {
+      // Support for simple templating: {arg0}, {arg1}, etc.
+      let result = output;
+      args.forEach((arg, idx) => {
+        result = result.replace(new RegExp(`\\{arg${idx}\\}`, 'g'), arg);
+      });
+      return result;
+    });
+
+    CustomCommandsRegistry.add(cmdName);
+    console.log(`[Console] Registered custom command: ${cmdName}`);
+  });
+}
+
+/**
+ * Unregisters all custom commands from the previous scenario
+ */
+function unregisterCustomCommands() {
+  CustomCommandsRegistry.forEach(cmdName => {
+    CommandRegistry.delete(cmdName);
+    console.log(`[Console] Unregistered custom command: ${cmdName}`);
+  });
+  CustomCommandsRegistry.clear();
 }
 
 // Parses command input and handles redirection (>, >>)
@@ -216,6 +302,12 @@ const TerminalUI = {
   getPrompt() {
     const { USER, RESET, PATH } = CONFIG.COLORS;
     return `${USER}forensic${RESET}:${PATH}${TerminalState.cwd}${RESET}$ `;
+  },
+  
+  getPromptVisualLength() {
+    // Visual length of prompt: "forensic:/home/user$ " = typically 21 characters
+    const cwd = TerminalState.cwd || '/home/user';
+    return 8 + 1 + cwd.length + 2; // "forensic" + ":" + cwd + "$ "
   },
 
   write(text) {
@@ -293,18 +385,26 @@ const HistoryManager = {
 // Tab autocomplete - completes commands and file paths
 const Autocomplete = {
   execute() {
-    const pieces = TerminalState.buffer.trim().split(/\s+/);
+    // Only use text UP TO cursor position
+    const textUpToCursor = TerminalState.buffer.slice(0, TerminalState.cursorPos);
+    const pieces = textUpToCursor.trim().split(/\s+/);
     const isFirst = pieces.length <= 1;
     const current = pieces[pieces.length - 1] || '';
 
     let choices = [];
+    let prefix = current; // For filtering matches
+    
     if (isFirst) {
       choices = getAllCommands();
     } else {
+      // For paths, listCandidates extracts the directory and basename prefix
+      // We need to filter by the basename prefix, not the full path
+      const slash = current.lastIndexOf('/');
+      prefix = slash >= 0 ? current.slice(slash + 1) : current;
       choices = VFSManager.listCandidates(current || '', TerminalState.cwd);
     }
 
-    const matches = choices.filter(c => c.startsWith(current));
+    const matches = choices.filter(c => c.startsWith(prefix));
 
     if (matches.length === 1) {
       this.fillMatch(matches[0], current, isFirst, pieces);
@@ -318,7 +418,16 @@ const Autocomplete = {
   },
 
   fillMatch(match, current, isFirst, pieces) {
-    const fill = match.slice(current.length);
+    // For commands, slice normally. For paths, only slice the basename prefix
+    let fill;
+    if (isFirst) {
+      fill = match.slice(current.length);
+    } else {
+      // Extract just the typed prefix (after the last / in current)
+      const slash = current.lastIndexOf('/');
+      const typedPrefix = slash >= 0 ? current.slice(slash + 1) : current;
+      fill = match.slice(typedPrefix.length);
+    }
     const wasAtEnd = TerminalState.cursorPos === TerminalState.buffer.length;
     
     // Insert fill at cursor position
@@ -415,18 +524,22 @@ const InputHandler = {
       return;
     }
 
-    // Arrow Up: history
+    // Arrow Up: history (only when cursor is at end)
     if (ev.key === 'ArrowUp') {
       ev.preventDefault();
-      HistoryManager.up();
+      if (TerminalState.cursorPos === TerminalState.buffer.length) {
+        HistoryManager.up();
+      }
       setTimeout(() => TerminalState.term.focus(), 0);
       return;
     }
 
-    // Arrow Down: history
+    // Arrow Down: history (only when cursor is at end)
     if (ev.key === 'ArrowDown') {
       ev.preventDefault();
-      HistoryManager.down();
+      if (TerminalState.cursorPos === TerminalState.buffer.length) {
+        HistoryManager.down();
+      }
       setTimeout(() => TerminalState.term.focus(), 0);
       return;
     }
@@ -560,22 +673,20 @@ const InputHandler = {
   },
 
   redrawBuffer() {
-    // Move cursor to start
-    for (let i = 0; i < TerminalState.cursorPos; i++) {
-      TerminalUI.write('\b');
-    }
-    // Clear rest of line
-    for (let i = 0; i < TerminalState.buffer.length; i++) {
-      TerminalUI.write(' ');
-    }
-    // Move cursor back to start
-    for (let i = 0; i < TerminalState.buffer.length; i++) {
-      TerminalUI.write('\b');
-    }
-    // Redraw buffer
+    const bufLen = TerminalState.buffer.length;
+    const curPos = TerminalState.cursorPos;
+    
+    // Use absolute cursor positioning: go to start of line, redraw everything
+    TerminalUI.write('\r');
+    TerminalUI.write(TerminalUI.getPrompt());
     TerminalUI.write(TerminalState.buffer);
-    // Move cursor to correct position
-    for (let i = TerminalState.cursorPos; i < TerminalState.buffer.length; i++) {
+    
+    // Clear to end of line (handles shorter buffers)
+    TerminalUI.write('\x1b[K');
+    
+    // Position cursor correctly (move back from end of buffer to cursor position)
+    const charsToMoveBack = bufLen - curPos;
+    for (let i = 0; i < charsToMoveBack; i++) {
       TerminalUI.write('\b');
     }
   },
@@ -657,21 +768,18 @@ const TaskManager = {
     if (advanceTask) advanceTask();
     // Note: updateTaskHUD() removed - taskHud now listens to PROGRESS_UPDATED event from taskManager
     
-    TerminalUI.writeLine(`\nTask completed: ${prevTitle}`);
-    const next = currentTask?.();
-    
-    if (next) {
-      TerminalUI.writeLine(`Next: ${next.title}  ${next.details}\n`);
-    } else {
-      TerminalUI.writeLine('All tasks completed. \n');
-    }
-
+    // Task completion is already shown via toast notification - no need for console clutter
     if (notifyComplete) notifyComplete(prevTitle);
   },
 
   arraysMatch(a, b) {
     if (a.length !== b.length) return false;
-    return a.every((val, i) => val.trim() === b[i].trim());
+    return a.every((val, i) => {
+      // Normalize trailing slashes when comparing paths
+      const aVal = val.trim().replace(/\/$/, '');
+      const bVal = b[i].trim().replace(/\/$/, '');
+      return aVal === bVal;
+    });
   }
 };
 
@@ -1043,6 +1151,11 @@ export function initConsole() {
     HistoryManager.loadFromStorage();
     registerBuiltinCommands();
 
+    // Expose VFS mount function to window for task manager to auto-mount devices
+    window.updateVFSWithDevice = (mountPath, content) => {
+      VFSManager.mountDeviceContent(mountPath, content);
+    };
+
     // Ensure console starts hidden (use class-based control)
     const consoleContainer = document.getElementById('consoleContainer');
     if (consoleContainer) {
@@ -1066,6 +1179,19 @@ export function initConsole() {
       const shouldOpen = data?.open !== undefined ? data.open : !isConsoleOpen();
       console.log(`[Console] Toggle event received - open: ${shouldOpen}`);
       toggleConsoleVisibility(shouldOpen);
+    });
+
+    // Listen to scenario changes to register custom commands
+    eventBus.on(Events.SCENARIO_CHANGED, (data) => {
+      console.log(`[Console] Scenario changed: ${data?.scenarioId}`);
+      
+      // Clean up custom commands from previous scenario
+      unregisterCustomCommands();
+      
+      // Register new custom commands from the new scenario
+      if (data?.scenario?.customCommands) {
+        registerCustomCommands(data.scenario.customCommands);
+      }
     });
 
   } catch (err) {
