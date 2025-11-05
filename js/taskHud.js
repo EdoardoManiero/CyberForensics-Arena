@@ -27,10 +27,11 @@ const UI_CONFIG = {
   PROGRESS_TEXT_ID: 'taskProgressText',
   TITLE_ID: 'taskHudTitle',
   TOAST_CONTAINER_ID: 'toastContainer',
-  TERMINAL_ID: 'terminal'
+  TERMINAL_ID: 'terminal',
+  COLLAPSE_BTN_ID: 'taskHudCollapseBtn'
 };
 
-const TOAST_DURATION = 2800;
+const TOAST_DURATION = 7000;
 
 // ============================================================================
 // STATE
@@ -42,7 +43,8 @@ const hudState = {
   progress: null,
   progressText: null,
   title: null,
-  toastHost: null
+  toastHost: null,
+  isCollapsed: false
 };
 
 // ============================================================================
@@ -68,20 +70,25 @@ function ensureRoot() {
     <div class="task-hud-header">
       <i class="fas fa-tasks"></i>
       <span id="${UI_CONFIG.TITLE_ID}">Loading...</span>
+      <button id="${UI_CONFIG.COLLAPSE_BTN_ID}" class="task-hud-collapse-btn" title="Toggle task list">
+        <i class="fas fa-chevron-down"></i>
+      </button>
     </div>
 
-    <div class="scenario-selector">
-      <label for="${UI_CONFIG.DROPDOWN_ID}">Scenario:</label>
-      <select id="${UI_CONFIG.DROPDOWN_ID}"></select>
-    </div>
-
-    <div id="${UI_CONFIG.LIST_ID}" class="task-list"></div>
-    
-    <div class="task-progress">
-      <div class="progress-bar">
-        <div id="${UI_CONFIG.PROGRESS_ID}" class="progress-fill"></div>
+    <div class="task-hud-collapsible">
+      <div class="scenario-selector">
+        <label for="${UI_CONFIG.DROPDOWN_ID}">Scenario:</label>
+        <select id="${UI_CONFIG.DROPDOWN_ID}"></select>
       </div>
-      <div id="${UI_CONFIG.PROGRESS_TEXT_ID}" class="progress-text">0/0</div>
+
+      <div id="${UI_CONFIG.LIST_ID}" class="task-list"></div>
+      
+      <div class="task-progress">
+        <div class="progress-bar">
+          <div id="${UI_CONFIG.PROGRESS_ID}" class="progress-fill"></div>
+        </div>
+        <div id="${UI_CONFIG.PROGRESS_TEXT_ID}" class="progress-text">0/0</div>
+      </div>
     </div>
   `;
 
@@ -95,6 +102,12 @@ function ensureRoot() {
   hudState.progress = root.querySelector(`#${UI_CONFIG.PROGRESS_ID}`);
   hudState.progressText = root.querySelector(`#${UI_CONFIG.PROGRESS_TEXT_ID}`);
   hudState.title = root.querySelector(`#${UI_CONFIG.TITLE_ID}`);
+
+  // Setup collapse button
+  const collapseBtn = root.querySelector(`#${UI_CONFIG.COLLAPSE_BTN_ID}`);
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', toggleTaskHudCollapse);
+  }
 
   // Setup toast container
   let toastContainer = document.getElementById(UI_CONFIG.TOAST_CONTAINER_ID);
@@ -152,6 +165,49 @@ function injectStyles() {
       margin-bottom: 14px;
       padding-bottom: 10px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      justify-content: space-between;
+    }
+
+    .task-hud-collapse-btn {
+      background: none;
+      border: none;
+      color: #22c55e;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 8px;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .task-hud-collapse-btn:hover {
+      color: #4ade80;
+      transform: scale(1.1);
+    }
+
+    .task-hud-collapse-btn i {
+      transition: transform 0.3s ease;
+    }
+
+    .task-hud.collapsed .task-hud-collapse-btn i {
+      transform: rotate(-90deg);
+    }
+
+    .task-hud-collapsible {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 600px;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      opacity: 1;
+    }
+
+    .task-hud.collapsed .task-hud-collapsible {
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
     }
 
     .scenario-selector {
@@ -436,6 +492,21 @@ function showToast(title, message) {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
   }, TOAST_DURATION);
+}
+
+/**
+ * Toggles the task HUD collapse state
+ */
+function toggleTaskHudCollapse() {
+  if (!hudState.root) return;
+  
+  hudState.isCollapsed = !hudState.isCollapsed;
+  
+  if (hudState.isCollapsed) {
+    hudState.root.classList.add('collapsed');
+  } else {
+    hudState.root.classList.remove('collapsed');
+  }
 }
 
 // ============================================================================
