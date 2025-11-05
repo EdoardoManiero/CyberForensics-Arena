@@ -20,11 +20,11 @@
           "action": "attach_device",
           "deviceName": "sdb",
           "deviceType": "disk",
-          "message": " Hard disk connected as /dev/sdb\\nUse 'lsblk' to display available devices",
+          "message": " Hard disk connected as /dev/sdb\nUse 'lsblk' to display available devices",
           "mountContent": {
-            "suspicious.log": "2024-10-15 03:45:12 - Unauthorized access attempt\\n2024-10-15 03:45:34 - Login from 192.168.1.50\\n2024-10-15 03:47:21 - File system modified: /etc/shadow\\npassword: forensic2024",
-            "deleted_files.txt": "Recovered files:\\n- secret_document.pdf (deleted 2024-10-15 04:12)\\n- evidence.docx (deleted 2024-10-15 04:13)",
-            "system_info.txt": "System: Ubuntu 22.04 LTS\\nKernel: 5.15.0-89-generic\\nLast boot: 2024-10-15 03:30:00"
+            "suspicious.log": "2024-10-15 03:45:12 - Unauthorized access attempt\n2024-10-15 03:45:34 - Login from 192.168.1.50\n2024-10-15 03:47:21 - File system modified: /etc/shadow\npassword: forensic2024",
+            "deleted_files.txt": "Recovered files:\n- secret_document.pdf (deleted 2024-10-15 04:12)\n- evidence.docx (deleted 2024-10-15 04:13)",
+            "system_info.txt": "System: Ubuntu 22.04 LTS\nKernel: 5.15.0-89-generic\nLast boot: 2024-10-15 03:30:00"
           }
         }
       },
@@ -83,11 +83,12 @@
           "action": "attach_device",
           "deviceName": "remote_server",
           "deviceType": "remote",
-          "message": " Connected to server 10.0.0.5 via SSH\\nLogs available. Use 'ls /var/log/network'",
+          "mountPoint": "/var/log/network",
+          "message": " Connected to server 10.0.0.5 via SSH\nLogs available. Use 'ls /var/log/network'",
           "mountContent": {
-            "auth.log": "Oct 15 03:45:10 server sshd[1234]: Failed password for admin from 192.168.1.50\\nOct 15 03:45:15 server sshd[1234]: Failed password for admin from 192.168.1.50\\nOct 15 03:45:23 server sshd[1234]: Accepted password for admin from 192.168.1.50",
-            "network.pcap": "[Binary packet capture - 15MB]\\nHTTP requests to suspicious domains detected",
-            "firewall.log": "DENY 192.168.1.100 -> 10.0.0.5:3389 [RDP]\\nALLOW 192.168.1.50 -> 10.0.0.5:22 [SSH]"
+            "auth.log": "Oct 15 03:45:10 server sshd[1234]: Failed password for admin from 192.168.1.50\nOct 15 03:45:15 server sshd[1234]: Failed password for admin from 192.168.1.50\nOct 15 03:45:23 server sshd[1234]: Accepted password for admin from 192.168.1.50",
+            "network.pcap": "[Binary packet capture - 15MB]\nHTTP requests to suspicious domains detected",
+            "firewall.log": "DENY 192.168.1.100 -> 10.0.0.5:3389 [RDP]\nALLOW 192.168.1.50 -> 10.0.0.5:22 [SSH]"
           }
         }
       },
@@ -127,6 +128,18 @@
     "title": "Memory Forensic",
     "description": "Analyze RAM memory dump to find artifacts",
     "introduction": "A RAM memory dump contains traces of malware. Analyze it using forensic tools to discover what malicious processes were running.",
+    "customCommands": [
+      {
+        "name": "memdump-info",
+        "description": "Display memory dump metadata and statistics",
+        "output": "Memory Dump Analysis\n====================\nSize: 8GB\nOS: Windows 10 x64\nCaptured: 2024-10-15 03:45:00\nHash: a7f3e8c9d2b1f4e6"
+      },
+      {
+        "name": "find-malware",
+        "description": "Scan for malicious signatures in memory",
+        "output": "[*] Scanning memory for malware signatures...\n[!] Found 3 suspicious processes:\n  - PID 1234: suspicious.exe (RISK: HIGH)\n  - PID 5678: malware.dll (RISK: CRITICAL)\n  - PID 9012: keylogger.sys (RISK: CRITICAL)"
+      }
+    ],
     "interactableObjects": ["HD2-01_HD-2_0", "Laptop"],
     "tasks": [
       {
@@ -140,11 +153,11 @@
           "deviceName": "sdc",
           "deviceType": "disk",
           "size": "16G",
-          "message": " Device connected as /dev/sdc\\nContains 8GB memory dump",
+          "message": " Device connected as /dev/sdc\nContains 8GB memory dump",
           "mountContent": {
-            "memory.dmp": "[Binary memory dump - 8GB]\\nWindows 10 x64 memory image",
-            "process_list.txt": "PID 1234 - suspicious.exe\\nPID 5678 - malware.dll\\nPID 9012 - keylogger.sys\\nPID 4321 - backdoor.exe",
-            "registry_hives.txt": "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\\n- Malware: C:\\\\Windows\\\\Temp\\\\evil.exe"
+            "memory.dmp": "[Binary memory dump - 8GB]\nWindows 10 x64 memory image",
+            "process_list.txt": "PID 1234 - suspicious.exe\nPID 5678 - malware.dll\nPID 9012 - keylogger.sys\nPID 4321 - backdoor.exe",
+            "registry_hives.txt": "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run\n- Malware: C:\\\\Windows\\\\Temp\\\\evil.exe"
           }
         }
       },
@@ -178,9 +191,16 @@
       },
       {
         "id": "mem_task_6",
-        "title": "Use Volatility for advanced analysis",
-        "details": "Use 'volatility' to extract artifacts from memory",
-        "checkCommand": "volatility",
+        "title": "Get memory dump metadata",
+        "details": "Use 'memdump-info' to display memory dump analysis and statistics",
+        "checkCommand": "memdump-info",
+        "checkArgs": []
+      },
+      {
+        "id": "mem_task_7",
+        "title": "Scan for malicious signatures",
+        "details": "Use 'find-malware' to identify suspicious processes and malware in memory",
+        "checkCommand": "find-malware",
         "checkArgs": []
       }
     ]
