@@ -256,12 +256,19 @@ export function setupInteractions(scene, camera) {
     }
 
     if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
-      if (!highlightedMesh) return;
+      // Tutorial canvas click (no mesh hit) - for "Click to Move Camera" step
+      if (!highlightedMesh) {
+        if (window.tutorial?.idx === 1 && !window.tutorial._done) {
+          console.log('Tutorial step: clicked canvas');
+          eventBus.emit(Events.TUTORIAL_CANVAS_CLICKED);
+        }
+        return;
+      }
 
       // Tutorial click handling
-      if (window.tutorial?.idx === 2 && !window.tutorial._done) {
+      if (window.tutorial?.idx === 3 && !window.tutorial._done) {
         console.log('Tutorial step: clicked interactable');
-        window.tutorial?.signalClickedInteractable?.();
+        eventBus.emit(Events.TUTORIAL_INTERACTABLE_CLICKED);
         return;
       }
 
@@ -269,7 +276,7 @@ export function setupInteractions(scene, camera) {
       if (isPCMesh(highlightedMesh)) {
         console.log('PC mesh clicked - requesting console open');
         eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
-        window.tutorial?.signalConsoleOpen?.();
+        eventBus.emit(Events.TUTORIAL_CONSOLE_OPENED);
         return;
       }
 
@@ -303,8 +310,8 @@ export function setupInteractions(scene, camera) {
         event.preventDefault();
         console.log('E key pressed on PC mesh - requesting console open');
         eventBus.emit(Events.CONSOLE_TOGGLE, { open: true });
-        window.tutorial?.signalInteract?.();
-        window.tutorial?.signalConsoleOpen?.();
+        eventBus.emit(Events.TUTORIAL_INTERACTED);
+        eventBus.emit(Events.TUTORIAL_CONSOLE_OPENED);
       }
     } catch (error) {
       console.warn('E key handler error:', error);
@@ -328,12 +335,12 @@ export function setupInteractions(scene, camera) {
       return;
     }
 
-    // C toggles console open - but block during tutorial steps 0-2 (before step 3 "Open Console")
+    // C toggles console open - but block during tutorial steps 0-3 (before step 4 "Open Console")
     if (key === KEY_CODES.C) {
-      // Block C key during tutorial steps 0-2
-      if (window.tutorial && window.tutorial.idx < 3 && !window.tutorial._done) {
+      // Block C key during tutorial steps 0-3
+      if (window.tutorial && window.tutorial.idx < 4 && !window.tutorial._done) {
         event.preventDefault();
-        console.log('C key blocked during tutorial steps 0-2');
+        console.log('C key blocked during tutorial steps 0-3');
         return;
       }
       
@@ -341,16 +348,20 @@ export function setupInteractions(scene, camera) {
       console.log('C key pressed - requesting console toggle');
       // Don't specify 'open' - let console handle toggle logic
       eventBus.emit(Events.CONSOLE_TOGGLE, {});
-      window.tutorial?.signalConsoleOpen?.();
+      eventBus.emit(Events.TUTORIAL_CONSOLE_OPENED);
       return;
     }
 
-    // ESC closes console
-    if (key === KEY_CODES.ESCAPE && isConsoleOpen()) {
-      event.preventDefault();
-      console.log('ESC key - requesting console close');
-      eventBus.emit(Events.CONSOLE_TOGGLE, { open: false });
-      document.getElementById(CANVAS_ELEMENT_ID)?.focus();
+    // ESC closes console or signals tutorial
+    if (key === KEY_CODES.ESCAPE) {
+      eventBus.emit(Events.TUTORIAL_ESC_PRESSED);
+      
+      if (isConsoleOpen()) {
+        event.preventDefault();
+        console.log('ESC key - requesting console close');
+        eventBus.emit(Events.CONSOLE_TOGGLE, { open: false });
+        document.getElementById(CANVAS_ELEMENT_ID)?.focus();
+      }
     }
   }
 
@@ -397,7 +408,7 @@ export function setupInteractions(scene, camera) {
     if ([KEY_CODES.W, KEY_CODES.A, KEY_CODES.S, KEY_CODES.D,
           KEY_CODES.ARROW_UP, KEY_CODES.ARROW_DOWN,
           KEY_CODES.ARROW_LEFT, KEY_CODES.ARROW_RIGHT].includes(key)) {
-      window.tutorial?.signalMoved?.();
+      eventBus.emit(Events.TUTORIAL_MOVED);
       movementSignaled = true;
     }
   }

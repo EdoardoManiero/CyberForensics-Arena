@@ -707,7 +707,7 @@ const CommandExecutor = {
     const { cmd, args, redir } = Parser.parse(line);
     if (!cmd) return;
 
-    if (window.tutorial?.signalTyped) window.tutorial.signalTyped(cmd);
+    eventBus.emit(Events.TUTORIAL_COMMAND_TYPED, { command: cmd });
 
     HistoryManager.save(line);
     TaskManager.checkCompletion(cmd, args);

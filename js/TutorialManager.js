@@ -49,6 +49,7 @@ export class TutorialManager {
     this.dom = this._initializeDom();
 
     this._setupEventHandlers();
+    this._setupTutorialEventListeners();
     this._showStep(0);
 
     console.log(`TutorialManager ${TUTORIAL_CONFIG.VERSION} initialized`);
@@ -64,6 +65,11 @@ export class TutorialManager {
         title: 'Forensic Investigator',
           text: 'You have been assigned to a complex digital case. Your task is to explore this environment, interact with the devices and use the Linux console to analyze the evidence. Every choice counts. Are you ready?',
         predicate: () => false,
+      },
+      {
+        title: 'Look Around',
+        text: 'Click on the canvas to look around, then press <b>ESC</b> to regain control of your mouse cursor.',
+        predicate: () => this._canvasClicked && this._pressedEsc,
       },
       {
         title: 'Move Around',
@@ -126,6 +132,63 @@ export class TutorialManager {
     this.dom.btnNext.onclick = () => this._advance();
 
     setTimeout(() => this.dom.canvas?.focus(), 0);
+  }
+
+  // ========================================================================
+  // EVENT LISTENERS
+  // ========================================================================
+
+  _setupTutorialEventListeners() {
+    eventBus.on(Events.TUTORIAL_MOVED, () => this._onMoved());
+    eventBus.on(Events.TUTORIAL_INTERACTED, () => this._onInteracted());
+    eventBus.on(Events.TUTORIAL_CONSOLE_OPENED, () => this._onConsoleOpened());
+    eventBus.on(Events.TUTORIAL_INTERACTABLE_CLICKED, () => this._onClickedInteractable());
+    eventBus.on(Events.TUTORIAL_COMMAND_TYPED, (data) => this._onTyped(data?.command));
+    eventBus.on(Events.TUTORIAL_ESC_PRESSED, () => this._onPressedEsc());
+    eventBus.on(Events.TUTORIAL_CANVAS_CLICKED, () => this._onCanvasClicked());
+  }
+
+  _onMoved() {
+    if (this._done) return;
+    this._moved = true;
+    this._check();
+  }
+
+  _onInteracted() {
+    if (this._done) return;
+    this._interacted = true;
+    this._check();
+  }
+
+  _onConsoleOpened() {
+    if (this._done) return;
+    this._consoleOpened = true;
+    this._check();
+  }
+
+  _onClickedInteractable() {
+    if (this._done) return;
+    console.log('Tutorial: Clicked interactable');
+    this._clickedInteractable = true;
+    this._check();
+  }
+
+  _onTyped(cmd) {
+    if (this._done) return;
+    if (cmd === 'help') this._typedHelp = true;
+    this._check();
+  }
+
+  _onPressedEsc() {
+    if (this._done) return;
+    this._pressedEsc = true;
+    this._check();
+  }
+
+  _onCanvasClicked() {
+    if (this._done) return;
+    this._canvasClicked = true;
+    this._check();
   }
 
   _applyTheme() {
@@ -614,6 +677,8 @@ export class TutorialManager {
     this._consoleOpened = false;
     this._typedHelp = false;
     this._clickedInteractable = false;
+    this._pressedEsc = false;
+    this._canvasClicked = false;
   }
 
   // ========================================================================
@@ -644,36 +709,6 @@ export class TutorialManager {
     this.dom.canvas?.focus();
   }
 
-  signalMoved() {
-    if (this._done) return;
-    this._moved = true;
-    this._check();
-  }
-
-  signalInteract() {
-    if (this._done) return;
-    this._interacted = true;
-    this._check();
-  }
-
-  signalConsoleOpen() {
-    if (this._done) return;
-    this._consoleOpened = true;
-    this._check();
-  }
-
-  signalClickedInteractable() {
-    if (this._done) return;
-    console.log('Tutorial: Clicked interactable');
-    this._clickedInteractable = true;
-    this._check();
-  }
-
-  signalTyped(cmd) {
-    if (this._done) return;
-    if (cmd === 'help') this._typedHelp = true;
-    this._check();
-  }
 }
 
 console.log('TutorialManager module loaded');

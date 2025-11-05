@@ -137,6 +137,27 @@ export const Events = {
   
   /** Tutorial completed */
   TUTORIAL_COMPLETED: 'tutorial:completed',
+
+  /** User moved in the scene (for tutorial) */
+  TUTORIAL_MOVED: 'tutorial:moved',
+
+  /** User interacted with object (for tutorial) */
+  TUTORIAL_INTERACTED: 'tutorial:interacted',
+
+  /** User opened console (for tutorial) */
+  TUTORIAL_CONSOLE_OPENED: 'tutorial:consoleOpened',
+
+  /** User clicked interactable object (for tutorial) */
+  TUTORIAL_INTERACTABLE_CLICKED: 'tutorial:interactableClicked',
+
+  /** User typed command (for tutorial) */
+  TUTORIAL_COMMAND_TYPED: 'tutorial:commandTyped',
+
+  /** User pressed ESC (for tutorial) */
+  TUTORIAL_ESC_PRESSED: 'tutorial:escPressed',
+
+  /** User clicked on canvas to look around (for tutorial) */
+  TUTORIAL_CANVAS_CLICKED: 'tutorial:canvasClicked',
   
   // ===== LOGIC LAYER     RENDERING LAYER =====
   
