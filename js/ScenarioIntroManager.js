@@ -8,6 +8,8 @@
  * Coordinates with Task Manager to show scenario details before gameplay
  */
 
+import { TaskHud } from './taskHud.js';
+import { eventBus, Events } from './eventBus.js';
 export class ScenarioIntroManager {
   static VERSION = '1.0-initial';
 
@@ -21,6 +23,9 @@ export class ScenarioIntroManager {
    * @returns {Promise<void>} Resolves when user closes the modal
    */
   showIntro(scenarioData) {
+    document.exitPointerLock();
+    TaskHud.hide();
+    eventBus.emit(Events.CONSOLE_TOGGLE,{open : false});
     return new Promise((resolve) => {
       if (!scenarioData || !scenarioData.introduction) {
         console.warn('[ScenarioIntro] No introduction text provided');
@@ -46,6 +51,7 @@ export class ScenarioIntroManager {
       const onClose = () => {
         this._closeIntro(overlay);
         this._isShowing = false;
+        TaskHud.show();
         resolve();
       };
 
