@@ -12,7 +12,7 @@
  */
 
 import * as BABYLON from '@babylonjs/core';
-import { highlightLayer, permanentHighlightedMeshes, setCurrentHoveredMesh, clearCurrentHoveredMesh } from './scene.js';
+import { highlightLayer, permanentHighlightedMeshes, setCurrentHoveredMesh, clearCurrentHoveredMesh, safeRespawn } from './scene.js';
 import { eventBus, Events } from './eventBus.js';
 
 // ============================================================================
@@ -27,7 +27,7 @@ const XTERM_TEXTAREA_CLASS = 'xterm-helper-textarea';
 const TUTORIAL_OVERLAY_ID = 'tutorial-overlay';
 
 const HIGHLIGHT_COLOR = {
-  HOVER: new BABYLON.Color3(0, 0.3, 0),
+  HOVER: new BABYLON.Color3(0, 0.8, 0),
   DEFAULT: new BABYLON.Color3(0, 0, 0)
 };
 
@@ -48,6 +48,7 @@ const KEY_CODES = {
 
 let highlightedMesh = null;
 let sceneRef = null;  // Will be set by setupInteractions to access currentTask
+let altKeyHeld = false;  // Track Alt key state manually
 const interactionHint = document.getElementById(HINT_ELEMENT_ID);
 
 // ============================================================================
@@ -353,6 +354,40 @@ export function setupInteractions(scene, camera) {
     }
   }
 
+  // Track Alt key manually (Firefox doesn't report altKey reliably)
+  function trackAltKey(event) {
+    const code = event.code || '';
+    if (code === 'AltLeft' || code === 'AltRight') {
+      if (event.type === 'keydown') {
+        altKeyHeld = true;
+      } else if (event.type === 'keyup') {
+        altKeyHeld = false;
+      }
+    }
+  }
+
+  // Alt+R: Safe respawn
+  function handleSafeRespawn(event) {
+    trackAltKey(event);  // Update Alt key state
+    
+    const key = (event.key || '').toLowerCase();
+    const code = event.code || '';
+    
+    // Check both key and code for better compatibility
+    const isRKey = key === 'r' || code === 'KeyR';
+    
+    // Use manually tracked Alt state instead of event.altKey
+    if (altKeyHeld && isRKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      const activeCamera = scene.activeCamera || scene.cameras[0];
+      if (activeCamera) {
+        safeRespawn(scene, activeCamera);
+      }
+      return;
+    }
+  }
+
   // Movement signal for tutorial
   let movementSignaled = false;
   function handleMovement(event) {
@@ -370,15 +405,24 @@ export function setupInteractions(scene, camera) {
   // Register keyboard handlers
   scene.onKeyboardObservable.add((kb) => {
     if (kb.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+      handleSafeRespawn(kb.event);  // Check Alt+R FIRST with highest priority
       handleEKey(kb.event);
       handleMovement(kb.event);
+    } else if (kb.type === BABYLON.KeyboardEventTypes.KEYUP) {
+      trackAltKey(kb.event);  // Track Alt key release
     }
   });
 
+  // Keyboard handlers with capture phase
   document.addEventListener('keydown', (event) => {
+    handleSafeRespawn(event);  // Alt+R FIRST with highest priority
     handleEKey(event);
     handleConsoleLKeys(event);
     handleMovement(event);
+  }, true);
+
+  document.addEventListener('keyup', (event) => {
+    trackAltKey(event);  // Track Alt key release
   }, true);
 
   // ========== CAMERA SETUP ==========
