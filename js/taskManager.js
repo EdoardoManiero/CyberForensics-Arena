@@ -14,7 +14,7 @@ import { ScenarioIntroManager } from './ScenarioIntroManager.js';
 // CONSTANTS
 // ============================================================================
 
-const SCENARIOS_PATH = '/office3D-forensic-demo/scenarios.json';
+const SCENARIOS_PATH = '/CyberForensics-Arena/scenarios.json';
 const LOG_PREFIX = '[TaskManager]';
 
 // ============================================================================

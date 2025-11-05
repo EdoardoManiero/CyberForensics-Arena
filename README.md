@@ -1,8 +1,8 @@
-# Office 3D Forensic Demo
+# CyberForensics Arena
 
 An immersive interactive 3D environment for teaching **Digital Forensics** through gamification. An innovative educational prototype that combines a virtual workspace, a simulated Linux console, and a series of progressive investigative tasks.
 
-**🌐 Live Demo:** [https://edoardomaniero.github.io/office3D-forensic-demo/](https://edoardomaniero.github.io/office3D-forensic-demo/)
+**🌐 Live Demo:** [https://edoardomaniero.github.io/CyberForensics-Arena/](https://edoardomaniero.github.io/CyberForensics-Arena/)
 
 ---
 
@@ -24,7 +24,7 @@ An immersive interactive 3D environment for teaching **Digital Forensics** throu
 
 ## Overview
 
-**Office 3D Forensic Demo** is an educational prototype that simulates a forensic investigation office. Users can:
+**CyberForensics Arena** is an educational prototype that simulates a forensic investigation office. Users can:
 
 - Move in **first-person perspective** within a realistic 3D environment
 - Interact with **investigative objects** and IT infrastructure
@@ -107,7 +107,7 @@ Three **independent investigative scenarios** with progressive tasks:
 
 ### 🚀 Option 1: Live Demo (Recommended)
 
-Simply visit: [https://edoardomaniero.github.io/office3D-forensic-demo/](https://edoardomaniero.github.io/office3D-forensic-demo/)
+Simply visit: [https://edoardomaniero.github.io/CyberForensics-Arena/](https://edoardomaniero.github.io/CyberForensics-Arena/)
 
 ### 🛠️ Option 2: Local Installation
 
@@ -120,8 +120,8 @@ Simply visit: [https://edoardomaniero.github.io/office3D-forensic-demo/](https:/
 
 ```bash
 # Clone the repository
-git clone https://github.com/EdoardoManiero/office3D-forensic-demo.git
-cd office3D-forensic-demo
+git clone https://github.com/EdoardoManiero/CyberForensics-Arena.git
+cd CyberForensics-Arena
 
 # Install dependencies
 npm install
@@ -203,7 +203,7 @@ npm run build
 ### 📁 Project Structure
 
 ```
-office3D-forensic-demo/
+CyberForensics-Arena/
 ├── index.html                    # HTML entry point
 ├── style.css                     # Global styles
 ├── package.json                  # Dependencies and build config
@@ -610,7 +610,7 @@ We greatly appreciate community feedback!
 
 ### 🐛 Report Bugs
 
-Open an [Issue on GitHub](https://github.com/EdoardoManiero/office3D-forensic-demo/issues) with:
+Open an [Issue on GitHub](https://github.com/EdoardoManiero/CyberForensics-Arena/issues) with:
 - Problem description
 - Steps to reproduce
 - Browser and version used
@@ -618,7 +618,7 @@ Open an [Issue on GitHub](https://github.com/EdoardoManiero/office3D-forensic-de
 
 ### 💡 Suggestions and Feature Requests
 
-Share your ideas by opening a [Discussion](https://github.com/EdoardoManiero/office3D-forensic-demo/discussions)
+Share your ideas by opening a [Discussion](https://github.com/EdoardoManiero/CyberForensics-Arena/discussions)
 
 ### 🤝 How to Contribute
 
@@ -637,7 +637,7 @@ Share your ideas by opening a [Discussion](https://github.com/EdoardoManiero/off
 | **Author** | Edoardo Maniero |
 | **Email** | [edoardomaniero@gmail.com](mailto:edoardomaniero@gmail.com) |
 | **GitHub** | [@EdoardoManiero](https://github.com/EdoardoManiero) |
-| **Repository** | [office3D-forensic-demo](https://github.com/EdoardoManiero/office3D-forensic-demo) |
+| **Repository** | [CyberForensics-Arena](https://github.com/EdoardoManiero/CyberForensics-Arena) |
 
 ---
 

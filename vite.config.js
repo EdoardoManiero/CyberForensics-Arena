@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/office3D-forensic-demo/',
+  base: '/CyberForensics-Arena/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets'

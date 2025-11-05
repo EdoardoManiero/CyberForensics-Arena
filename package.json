@@ -10,15 +10,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EdoardoManiero/office3D-forensic-demo.git"
+    "url": "git+https://github.com/EdoardoManiero/CyberForensics-Arena.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/EdoardoManiero/office3D-forensic-demo/issues"
+    "url": "https://github.com/EdoardoManiero/CyberForensics-Arena/issues"
   },
-  "homepage": "https://github.com/EdoardoManiero/office3D-forensic-demo#readme",
+  "homepage": "https://github.com/EdoardoManiero/CyberForensics-Arena#readme",
   "dependencies": {
     "@babylonjs/core": "^8.33.4",
     "@babylonjs/loaders": "^8.33.4",
