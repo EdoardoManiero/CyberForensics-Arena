@@ -344,28 +344,51 @@ function handleCustomInteraction(actionObj) {
   if (!actionObj) return;
 
   console.log(`${LOG_PREFIX} Executing custom interaction:`, actionObj.action);
+  console.log(`${LOG_PREFIX} Full actionObj:`, actionObj);
 
   if (actionObj.action === 'attach_device') {
     if (!window.attachedDevices) {
       window.attachedDevices = [];
     }
 
+    const partition = {
+      name: `${actionObj.deviceName}1`,
+      size: '499G',
+      mounted: false,
+      mountPoint: '',
+      content: actionObj.mountContent || {}
+    };
+
+    // For remote devices, automatically mount to specified mountPoint
+    if (actionObj.deviceType === 'remote' && actionObj.mountPoint) {
+      partition.mounted = true;
+      partition.mountPoint = actionObj.mountPoint;
+    }
+
     const device = {
       name: actionObj.deviceName,
       type: actionObj.deviceType,
       size: actionObj.size || '500G',
-      partitions: [
-        {
-          name: `${actionObj.deviceName}1`,
-          size: '499G',
-          mounted: false,
-          mountPoint: '',
-          content: actionObj.mountContent || {}
-        }
-      ]
+      partitions: [partition]
     };
 
     window.attachedDevices.push(device);
+
+    // If device is auto-mounted and has VFS integration, update the virtual file system
+    console.log('[taskManager] Auto-mount check:', {
+      deviceType: actionObj.deviceType,
+      mounted: partition.mounted,
+      mountPoint: partition.mountPoint,
+      hasUpdateVFSWithDevice: !!window.updateVFSWithDevice,
+      contentKeys: Object.keys(partition.content || {})
+    });
+    
+    if (partition.mounted && window.updateVFSWithDevice) {
+      console.log('[taskManager] Calling auto-mount with:', partition.mountPoint, partition.content);
+      window.updateVFSWithDevice(partition.mountPoint, partition.content);
+      console.log('[taskManager] Auto-mount completed');
+    }
+
     // Emit event for UI layer to show notification
     eventBus.emit(Events.TASK_COMPLETED, {
       taskTitle: actionObj.message,
