@@ -95,7 +95,7 @@
       {
         "id": "net_task_2",
         "title": "List system logs",
-        "details": "The remote server automatically mounts logs in /var/log/network",
+        "details": "The remote server automatically mounts logs in /var/log/network. Use ls to explore his content.",
         "checkCommand": "ls",
         "checkArgs": ["/var/log/network"]
       },
