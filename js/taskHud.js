@@ -367,9 +367,51 @@ function injectStyles() {
       animation: toastSlide 0.3s ease;
     }
 
+    .toast.scenario-complete {
+      background: linear-gradient(135deg, #06b6d4, #0891b2, #0e7490);
+      padding: 24px 32px;
+      border-radius: 12px;
+      font-size: 1.3rem;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4), 0 0 40px rgba(14, 116, 144, 0.3);
+      min-width: 360px;
+      text-align: center;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: scenarioCompletePulse 0.6s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .toast.scenario-complete strong {
+      display: block;
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .toast.scenario-complete div {
+      font-size: 1.1rem;
+      font-weight: 600;
+      opacity: 0.95;
+    }
+
     @keyframes toastSlide {
       from { opacity: 0; transform: translateY(-20px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes scenarioCompletePulse {
+      0% { 
+        opacity: 0; 
+        transform: translateY(-30px) scale(0.9);
+      }
+      50% {
+        transform: scale(1.02);
+      }
+      100% { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
     }
 
     /* Responsive styles for different screen sizes - BIGGER HUD ON WIDER SCREENS */
@@ -601,20 +643,26 @@ function updateDisplay() {
 
 /**
  * Shows a toast notification
+ * @param {string} title - Toast title
+ * @param {string} message - Toast message
+ * @param {string} type - Toast type: 'task' or 'scenario'
  */
-function showToast(title, message) {
+function showToast(title, message, type = 'task') {
   if (!hudState.toastHost) return;
 
   const toast = document.createElement('div');
-  toast.className = 'toast';
+  const isScenarioComplete = type === 'scenario';
+  
+  toast.className = `toast${isScenarioComplete ? ' scenario-complete' : ''}`;
   toast.innerHTML = `<strong>${title}</strong>${message ? `<div>${message}</div>` : ''}`;
   
   hudState.toastHost.appendChild(toast);
 
+  const duration = isScenarioComplete ? 8000 : TOAST_DURATION;
   setTimeout(() => {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
-  }, TOAST_DURATION);
+  }, duration);
 }
 
 /**
@@ -661,7 +709,7 @@ export const TaskHud = {
     // Listen for scenario completion
     eventBus.on(Events.SCENARIO_COMPLETED, (data) => {
       console.log('[TaskHud] Scenario completed:', data);
-      showToast('Scenario Complete!', data.scenarioTitle);
+      showToast('Congratulations! \n 🎉SCENARIO COMPLETE🎉', data.scenarioTitle, 'scenario');
       updateDisplay();
     });
 
