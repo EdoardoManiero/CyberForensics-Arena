@@ -750,16 +750,56 @@ const CommandExecutor = {
 
 // Task completion detector - checks if commands match task requirements
 const TaskManager = {
+  normalizePath(path) {
+    return path.replace(/\/$/, '');
+  },
+
   checkCompletion(cmd, args) {
     const task = currentTask?.();
     if (!task) return;
 
     if (task.checkCommand && task.checkCommand === cmd) {
-      if (task.checkArgs?.length > 0 && !this.arraysMatch(args, task.checkArgs)) {
-        return;
+      if (task.checkArgs?.length > 0) {
+        // Check for exact match first
+        if (this.arraysMatch(args, task.checkArgs)) {
+          this.notifyCompletion(task);
+          return;
+        }
+        
+        // Check if command has no args but expected args are a single path
+        // and that path matches current working directory
+        if (args.length === 0 && task.checkArgs.length === 1) {
+          const expectedPath = task.checkArgs[0];
+          const normalizedCwd = this.normalizePath(TerminalState.cwd);
+          const normalizedExpected = this.normalizePath(expectedPath);
+          
+          if (normalizedCwd === normalizedExpected) {
+            this.notifyCompletion(task);
+            return;
+          }
+        }
+        
+        // Check if arguments match after resolving relative paths
+        if (args.length === task.checkArgs.length) {
+          const resolvedArgs = args.map((arg, i) => {
+            // Treat last argument as potential path if it contains '/' or looks like a file
+            if (i === args.length - 1 && (arg.includes('/') || arg.includes('.'))) {
+              return this.normalizePath(VFSManager.resolvePath(arg, TerminalState.cwd));
+            }
+            return arg;
+          });
+          
+          const normalizedExpected = task.checkArgs.map(arg => this.normalizePath(arg));
+          
+          if (this.arraysMatch(resolvedArgs, normalizedExpected)) {
+            this.notifyCompletion(task);
+            return;
+          }
+        }
+      } else {
+        // No args expected
+        this.notifyCompletion(task);
       }
-
-      this.notifyCompletion(task);
     }
   },
 

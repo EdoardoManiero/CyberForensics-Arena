@@ -32,6 +32,19 @@ const state = {
 };
 
 // ============================================================================
+// PUBLIC API - INITIALIZATION
+// ============================================================================
+
+/**
+ * Sets up the task manager with scene reference for UI components
+ * @param {BABYLON.Scene} scene - The Babylon.js scene
+ */
+export function setupTaskManager(scene) {
+  state.introManager.scene = scene;
+  console.log(`${LOG_PREFIX} Task manager setup complete with scene`);
+}
+
+// ============================================================================
 // PUBLIC API - SCENARIOS
 // ============================================================================
 
