@@ -170,7 +170,9 @@ export async function createScene(engine, canvas) {
     highlightLayer,
     setCurrentHoveredMesh,
     clearCurrentHoveredMesh,
-    updateScenarioHighlights
+    updateScenarioHighlights,
+    camera,
+    canvas
   };
 
   console.log('Scene created successfully');
@@ -204,10 +206,12 @@ function createCamera(scene, canvas) {
   camera.keysRight.push(68); // D
   camera.minZ = 0.05;
 
-  // Pointer lock on click
+  // Pointer lock on click - but respect pointer lock disable flag
   canvas.addEventListener('click', () => {
-    canvas.requestPointerLock?.({ unadjustedMovement: true });
-    canvas.focus();
+    if (!window._disablePointerLock) {
+      canvas.requestPointerLock?.({ unadjustedMovement: true });
+      canvas.focus();
+    }
   });
 
   console.log('Camera created');

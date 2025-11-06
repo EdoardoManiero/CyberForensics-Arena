@@ -13,8 +13,9 @@ import { eventBus, Events } from './eventBus.js';
 export class ScenarioIntroManager {
   static VERSION = '1.0-initial';
 
-  constructor() {
+  constructor(scene = null) {
     this._isShowing = false;
+    this.scene = scene;
   }
 
   /**
@@ -23,9 +24,80 @@ export class ScenarioIntroManager {
    * @returns {Promise<void>} Resolves when user closes the modal
    */
   showIntro(scenarioData) {
-    document.exitPointerLock();
+    window._disablePointerLock = true;
+    
+    const canvas = this.scene?._renderingLayer?.canvas || document.getElementById('renderCanvas');
+    // Get fresh camera reference from scene, not cached
+    const camera = this.scene?.activeCamera;
+    
+    if (!canvas) {
+      console.warn('[ScenarioIntro] Canvas not found, cannot setup pointer lock exit');
+    }
+    if (!camera) {
+      console.warn('[ScenarioIntro] Camera not found, cannot detach controls');
+    }
+    
+    // Detach camera controls FIRST
+    if (camera && canvas) {
+      try {
+        camera.detachControl(canvas);
+        // Reset camera's internal pointer lock state
+        if (camera._needPointerLock !== undefined) {
+          camera._needPointerLock = false;
+        }
+        console.log('[ScenarioIntro] Camera controls detached');
+      } catch (e) {
+        console.warn('[ScenarioIntro] Failed to detach camera:', e);
+      }
+    }
+    
+    // Force exit pointer lock immediately and aggressively
+    try {
+      document.exitPointerLock?.();
+    } catch (e) {
+      console.warn('[ScenarioIntro] Initial exitPointerLock failed:', e);
+    }
+    
+    let lockAttempts = 0;
+    const exitLock = () => {
+      if (lockAttempts++ < 100) {  // Increased attempts from 50 to 100
+        try {
+          document.exitPointerLock?.();
+        } catch (e) {
+          // Silent fail, we're retrying anyway
+        }
+        setTimeout(exitLock, 5);  // Reduced interval from 10ms to 5ms
+      }
+    };
+    exitLock();
+    
+    // Disable pointer events on canvas
+    if (canvas) {
+      canvas.style.pointerEvents = 'none';
+      canvas.style.cursor = 'auto';
+      
+      // Block all mouse events on canvas during modal
+      const blockEvent = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      };
+      canvas.addEventListener('mousedown', blockEvent, true);
+      canvas.addEventListener('mouseup', blockEvent, true);
+      canvas.addEventListener('mousemove', blockEvent, true);
+      canvas.addEventListener('click', blockEvent, true);
+      
+      // Store handlers so we can remove them later
+      canvas._modalBlockHandlers = {
+        mousedown: blockEvent,
+        mouseup: blockEvent,
+        mousemove: blockEvent,
+        click: blockEvent
+      };
+    }
+    
     TaskHud.hide();
     eventBus.emit(Events.CONSOLE_TOGGLE,{open : false});
+    
     return new Promise((resolve) => {
       if (!scenarioData || !scenarioData.introduction) {
         console.warn('[ScenarioIntro] No introduction text provided');
@@ -52,6 +124,31 @@ export class ScenarioIntroManager {
         this._closeIntro(overlay);
         this._isShowing = false;
         TaskHud.show();
+        
+        // Remove event blocking from canvas
+        if (canvas && canvas._modalBlockHandlers) {
+          const handlers = canvas._modalBlockHandlers;
+          canvas.removeEventListener('mousedown', handlers.mousedown, true);
+          canvas.removeEventListener('mouseup', handlers.mouseup, true);
+          canvas.removeEventListener('mousemove', handlers.mousemove, true);
+          canvas.removeEventListener('click', handlers.click, true);
+          canvas._modalBlockHandlers = null;
+        }
+        
+        if (canvas) canvas.style.pointerEvents = 'auto';
+        window._disablePointerLock = false;
+        
+        // Re-attach camera controls - get fresh reference from scene
+        const currentCamera = this.scene?.activeCamera;
+        if (currentCamera && canvas) {
+          try {
+            currentCamera.attachControl(canvas, true);
+            console.log('[ScenarioIntro] Camera controls re-attached');
+          } catch (e) {
+            console.warn('[ScenarioIntro] Failed to re-attach camera:', e);
+          }
+        }
+        
         resolve();
       };
 
@@ -83,13 +180,26 @@ export class ScenarioIntroManager {
     overlay.style.cssText = `
       position: fixed;
       inset: 0;
-      z-index: 9997;
+      z-index: 99999;
       background: rgba(0, 0, 0, 0.6);
       display: flex;
       align-items: center;
       justify-content: center;
       backdrop-filter: blur(4px);
+      pointer-events: auto;
     `;
+    
+    // Prevent events on overlay background only (not on children like buttons)
+    const stopBackgroundEvent = (e) => {
+      if (e.target === overlay) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    };
+    overlay.addEventListener('mousedown', stopBackgroundEvent, true);
+    overlay.addEventListener('mouseup', stopBackgroundEvent, true);
+    overlay.addEventListener('contextmenu', stopBackgroundEvent, true);
+    
     return overlay;
   }
 

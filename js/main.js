@@ -11,7 +11,7 @@ import { createScene, updateScenarioHighlights } from './scene.js';
 import { setupInteractions } from './interaction.js';
 import { initConsole, toggleConsoleVisibility } from './console.js';
 import { TutorialManager } from './TutorialManager.js';
-import { loadScenarios, initTaskSystem, currentTask, switchScenarioWithIntro } from './taskManager.js';
+import { loadScenarios, initTaskSystem, currentTask, switchScenarioWithIntro, setupTaskManager } from './taskManager.js';
 import { TaskHud } from './taskHud.js';
 
 // ============================================================================
@@ -71,6 +71,15 @@ async function initializeApp() {
     // Attach currentTask getter to scene so rendering layer can access it
     // This allows interaction.js to check task state without importing from taskManager
     appState.scene._currentTask = currentTask;
+
+    // Store canvas and camera in rendering layer for UI components
+    appState.scene._renderingLayer = {
+      canvas: canvas,
+      camera: appState.scene.activeCamera
+    };
+
+    // Setup task manager with scene reference
+    setupTaskManager(appState.scene);
 
     // Setup interactions (mouse, keyboard, hover)
     setupInteractions(appState.scene, appState.scene.activeCamera);
@@ -195,8 +204,15 @@ function installPointerLockSafety(scene, canvas) {
     console.warn('Initial camera attachment failed:', error);
   }
 
-  canvas.addEventListener('click', () => {
-    if (document.pointerLockElement !== canvas) {
+  canvas.addEventListener('click', (e) => {
+    // Don't re-engage pointer lock if it's disabled (e.g., during scenario intro)
+    if (window._disablePointerLock) {
+      console.log('[PointerLock] Blocked re-engagement during scenario intro');
+      return;
+    }
+    
+    // Only engage pointer lock if not already locked and modal isn't showing
+    if (document.pointerLockElement !== canvas && !window._disablePointerLock) {
       try {
         scene.activeCamera?.attachControl(canvas, true);
         canvas.focus();
