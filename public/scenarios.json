@@ -8,7 +8,7 @@
     "title": "File System Forensic",
     "description": "Analyze storage devices and find the evidence",
     "introduction": "A suspicious hard disk has been seized. You must mount it, examine the file system, and find the hidden evidence. Use Linux commands to discover what happened.",
-    "interactableObjects": ["HD1-01_HD-1_0", "Laptop"],
+    "interactableObjects": ["HD1-01_HD-1_0", "LinuxComputer"],
     "tasks": [
       {
         "id": "fs_task_1",
@@ -71,7 +71,7 @@
     "title": "Network Forensic",
     "description": "Analyze network traffic and system logs",
     "introduction": "A server has been compromised. You need to analyze authentication logs and network traffic to identify the attacker. Connect to the server and investigate.",
-    "interactableObjects": ["Server", "Laptop"],
+    "interactableObjects": ["Server", "LinuxComputer"],
     "tasks": [
       {
         "id": "net_task_1",
@@ -140,7 +140,7 @@
         "output": "[*] Scanning memory for malware signatures...\n[!] Found 3 suspicious processes:\n  - PID 1234: suspicious.exe (RISK: HIGH)\n  - PID 5678: malware.dll (RISK: CRITICAL)\n  - PID 9012: keylogger.sys (RISK: CRITICAL)"
       }
     ],
-    "interactableObjects": ["HD2-01_HD-2_0", "Laptop"],
+    "interactableObjects": ["HD2-01_HD-2_0", "LinuxComputer"],
     "tasks": [
       {
         "id": "mem_task_1",
