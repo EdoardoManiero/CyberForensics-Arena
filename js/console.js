@@ -1,4 +1,17 @@
 // Forensic Shell - Terminal emulator for the 3D forensic investigation environment
+/** 
+ * console.js 
+ * Console module for the Forensic Shell application. This module provides an interactive terminal interface that allows users to interact with the virtual forensic environment through various commands and actions. 
+ * It includes features such as command execution, tab completion, history management, and more.
+ * The console also integrates with other modules like Task Manager and Event Bus to provide a seamless experience within the overall application architecture.
+ *
+ * Dependencies:
+ * - xterm.js: A lightweight, highly configurable JavaScript library for web-based terminals.
+ * - xterm-addon-fit: An addon for xterm.js that automatically adjusts the size of the terminal based on its container's dimensions.
+ *
+ * Usage
+ * **/
+
 import 'xterm/css/xterm.css';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
