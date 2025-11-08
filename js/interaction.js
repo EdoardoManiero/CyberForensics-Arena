@@ -47,6 +47,7 @@ const KEY_CODES = {
 // ============================================================================
 
 let highlightedMesh = null;
+let activeHighlightMeshes = [];
 let sceneRef = null;  // Will be set by setupInteractions to access currentTask
 let altKeyHeld = false;  // Track Alt key state manually
 const interactionHint = document.getElementById(HINT_ELEMENT_ID);
@@ -62,7 +63,6 @@ const interactionHint = document.getElementById(HINT_ELEMENT_ID);
  */
 function isPCMesh(mesh) {
   if (!mesh) return false;
-
   const name = (mesh.name || '').toLowerCase();
   const id = (mesh.id || '').toLowerCase();
   const tag = mesh.metadata?.tag ? String(mesh.metadata.tag).toLowerCase() : '';
@@ -71,8 +71,8 @@ function isPCMesh(mesh) {
     mesh.metadata?.isPC === true ||
     tag.includes('pc') || tag.includes('computer') || tag.includes('laptop') ||
     mesh.name === 'PC_Monitor' ||
-    /monitor|laptop|display|schermo|pc/.test(name) ||
-    /monitor|laptop|pc/.test(id)
+    /monitor|laptop|display|schermo|pc|linux/.test(name) ||
+    /monitor|laptop|pc/.test(id) 
   );
 }
 
@@ -92,7 +92,6 @@ export function isMeshMatching(mesh, targetName) {
   // Exact match
   if (meshName === targetName || meshId === targetName) return true;
   if (parentName === targetName) return true;
-
   // Starts with target (handles suffixes like _primitive0, _0)
   if (meshName.startsWith(targetName + '_') ||
       meshName.startsWith(targetName + '-') ||
@@ -122,6 +121,7 @@ function isInteractableMesh(mesh) {
 
   // Always allow PC interaction
   if (isPCMesh(mesh)) return true;
+  if(mesh.name.includes('primitive')) return false;
 
   // Check if mesh is in permanent highlights
   if (permanentHighlightedMeshes?.some(permMesh =>
@@ -186,12 +186,41 @@ function isTypingInXterm() {
 // HIGHLIGHT MANAGEMENT
 // ============================================================================
 
+function findPcGroupRoot(mesh) {
+  let current = mesh?.parent || null;
+  while (current) {
+    const name = (current.name || '').toLowerCase();
+    const id = (current.id || '').toLowerCase();
+    const tag = current.metadata?.tag ? String(current.metadata.tag).toLowerCase() : '';
+    if (current.metadata?.isPC === true || tag.includes('pc') || /linuxcomputer|pc|workstation|laptop/.test(name) || /linuxcomputer|pc|workstation|laptop/.test(id)) {
+      return current;
+    }
+    current = current.parent || null;
+  }
+  return null;
+}
+
+function getHighlightTargets(mesh) {
+  if (!mesh) return [];
+  if (isPCMesh(mesh)) {
+    const groupRoot = findPcGroupRoot(mesh) || mesh;
+    const targets = new Set();
+    if (groupRoot.getTotalVertices?.() > 0) targets.add(groupRoot);
+    const childMeshes = groupRoot.getChildMeshes?.(false) || [];
+    childMeshes.forEach(child => {
+      if (child.getTotalVertices?.() > 0) targets.add(child);
+    });
+    if (!targets.size && mesh.getTotalVertices?.() > 0) targets.add(mesh);
+    return Array.from(targets);
+  }
+  return [mesh];
+}
+
 /**
  * Updates hover highlight based on center screen pick
  */
 function updateHighlightFromPointer() {
   try {
-    // Find what's at screen center
     const engine = scene.getEngine();
     const centerX = engine.getRenderWidth() / 2;
     const centerY = engine.getRenderHeight() / 2;
@@ -201,26 +230,30 @@ function updateHighlightFromPointer() {
     const crosshair = document.getElementById(CROSSHAIR_ELEMENT_ID);
 
     if (pickedMesh) {
-      // Pointing at something
       if (interactionHint) interactionHint.style.display = 'block';
 
-      // Remove old highlight
-      if (highlightedMesh && highlightedMesh !== pickedMesh) {
-        highlightLayer.removeMesh(highlightedMesh);
+      if (activeHighlightMeshes.length) {
+        activeHighlightMeshes.forEach(mesh => highlightLayer.removeMesh(mesh));
+        activeHighlightMeshes = [];
       }
 
-      // Add new highlight
-      highlightLayer.addMesh(pickedMesh, HIGHLIGHT_COLOR.HOVER);
+      const highlightTargets = getHighlightTargets(pickedMesh);
+      highlightTargets.forEach(mesh => {
+        if (!mesh) return;
+        highlightLayer.addMesh(mesh, HIGHLIGHT_COLOR.HOVER);
+        activeHighlightMeshes.push(mesh);
+      });
+
       highlightedMesh = pickedMesh;
-      setCurrentHoveredMesh(highlightedMesh);
+      setCurrentHoveredMesh(activeHighlightMeshes[0] || pickedMesh);
       crosshair?.classList.add('targeting');
 
     } else {
-      // Pointing at nothing
       if (interactionHint) interactionHint.style.display = 'none';
 
-      if (highlightedMesh) {
-        highlightLayer.removeMesh(highlightedMesh);
+      if (activeHighlightMeshes.length) {
+        activeHighlightMeshes.forEach(mesh => highlightLayer.removeMesh(mesh));
+        activeHighlightMeshes = [];
       }
 
       highlightedMesh = null;
@@ -465,4 +498,15 @@ export function setupInteractions(scene, camera) {
       console.warn('Initial hint setup error:', error);
     }
   }, 600);
+
+  // ========== SCENARIO INTRO BLOCKING ==========
+  eventBus.on(Events.SCENARIO_INTRO_SHOWN, () => {
+    isScenarioIntroShowing = true;
+    console.log('Scenario intro shown - blocking pointer/camera controls');
+  });
+
+  eventBus.on(Events.SCENARIO_INTRO_HIDDEN, () => {
+    isScenarioIntroShowing = false;
+    console.log('Scenario intro hidden - enabling pointer/camera controls');
+  });
 }

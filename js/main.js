@@ -72,11 +72,6 @@ async function initializeApp() {
     // This allows interaction.js to check task state without importing from taskManager
     appState.scene._currentTask = currentTask;
 
-    // Store canvas and camera in rendering layer for UI components
-    appState.scene._renderingLayer = {
-      canvas: canvas,
-      camera: appState.scene.activeCamera
-    };
 
     // Setup task manager with scene reference
     setupTaskManager(appState.scene);
