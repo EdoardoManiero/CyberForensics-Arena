@@ -63,58 +63,7 @@ export function clearCurrentHoveredMesh() {
   currentHoveredMesh = null;
 }
 
-// ============================================================================
-// SCENE UPDATES
-// ============================================================================
 
-/**
- * Updates scenario highlights when scenario changes
- * Called when SCENARIO_CHANGED event is received from logic layer
- */
-export function updateScenarioHighlights() {
-  // Don't interrupt tutorial highlights
-  if (window._tutorialHighlightPause) {
-    return;
-  }
-
-  const scenario = currentScenarioData;
-  if (!highlightLayer) return;
-
-  highlightLayer.removeAllMeshes();
-  permanentHighlightedMeshes.length = 0;
-
-  if (!scenario?.interactableObjects) {
-    console.log('No scenario or interactable objects defined');
-    return;
-  }
-
-  const targetNames = scenario.interactableObjects;
-  console.log(`Highlighting objects for: ${scenario.title}`);
-
-  if (!allInteractableMeshes?.length) {
-    console.warn('No interactable meshes found');
-    return;
-  }
-
-  allInteractableMeshes.forEach(mesh => {
-    const meshName = mesh.name || mesh.id;
-    const parentName = mesh.parent?.name || null;
-
-    const isMatched = targetNames.some(targetName => {
-      if (meshName === targetName) return true;
-      if (meshName.startsWith(targetName + '_') || 
-          meshName.startsWith(targetName + '-')) return true;
-      if (meshName.includes(targetName)) return true;
-      if (parentName === targetName) return true;
-      return false;
-    });
-
-    if (isMatched) {
-      permanentHighlightedMeshes.push(mesh);
-      console.log(`Highlighted: ${meshName}`);
-    }
-  });
-}
 
 // ============================================================================
 // SCENE CREATION
@@ -349,6 +298,88 @@ function setupCameraSpawn(scene, camera) {
   }
 
   console.log('Camera spawn setup complete');
+}
+
+// ============================================================================
+// SCENE UPDATES
+// ============================================================================
+
+/**
+ * Updates scenario highlights when scenario changes
+ * Called when SCENARIO_CHANGED event is received from logic layer
+ */
+export function updateScenarioHighlights() {
+  // Don't interrupt tutorial highlights
+  if (window._tutorialHighlightPause) {
+    return;
+  }
+
+  const scenario = currentScenarioData;
+  if (!highlightLayer) return;
+
+  highlightLayer.removeAllMeshes();
+  permanentHighlightedMeshes.length = 0;
+
+  if (!scenario?.interactableObjects) {
+    console.log('No scenario or interactable objects defined');
+    return;
+  }
+
+  const targetNames = scenario.interactableObjects;
+  console.log(`Highlighting objects for: ${scenario.title}`);
+
+  if (!allInteractableMeshes?.length) {
+    console.warn('No interactable meshes found');
+    return;
+  }
+
+  allInteractableMeshes.forEach(mesh => {
+    // Extract identifiers
+    const meshName = mesh.name || mesh.id || '';
+    const meshId = mesh.id || '';
+    const parentName = mesh.parent?.name || '';
+    const parentId = mesh.parent?.id || '';
+    const meshTag = typeof mesh.metadata?.tag !== 'undefined' ? String(mesh.metadata.tag) : '';
+    const parentTag = typeof mesh.parent?.metadata?.tag !== 'undefined' ? String(mesh.parent.metadata.tag) : '';
+
+    // Case-insensitive matching
+    const meshNameLower = meshName.toLowerCase();
+    const meshIdLower = meshId.toLowerCase();
+    const parentNameLower = parentName.toLowerCase();
+    const parentIdLower = parentId.toLowerCase();
+    const meshTagLower = meshTag.toLowerCase();
+    const parentTagLower = parentTag.toLowerCase();
+
+    // Check for matches
+    const isMatched = targetNames.some(targetName => {
+      if (!targetName) return false;
+      const targetLower = targetName.toLowerCase();
+
+      if (meshNameLower === targetLower) return true;
+      if (meshIdLower === targetLower) return true;
+      if (parentNameLower === targetLower) return true;
+      if (parentIdLower === targetLower) return true;
+      if (meshTagLower === targetLower) return true;
+      if (parentTagLower === targetLower) return true;
+
+      if (meshNameLower.startsWith(`${targetLower}_`) || meshNameLower.startsWith(`${targetLower}-`)) return true;
+      if (meshIdLower.startsWith(`${targetLower}_`) || meshIdLower.startsWith(`${targetLower}-`)) return true;
+
+      if (meshNameLower.includes(targetLower)) return true;
+      if (meshIdLower.includes(targetLower)) return true;
+      if (parentNameLower.includes(targetLower)) return true;
+      if (parentIdLower.includes(targetLower)) return true;
+      if (meshTagLower.includes(targetLower)) return true;
+      if (parentTagLower.includes(targetLower)) return true;
+
+      return false;
+    });
+
+    if (isMatched) {
+      permanentHighlightedMeshes.push(mesh);
+      console.log(`Highlighted: ${meshName}`);
+    }
+  });
 }
 
 // ============================================================================
