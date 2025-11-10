@@ -124,9 +124,61 @@ export async function createScene(engine, canvas) {
     canvas
   };
 
+  
+  // Initialize joysticks for mobile
+  let leftJoystick, rightJoystick;
+
+  if (isMobile()) {
+      // Movement joystick (left side)
+      leftJoystick = new BABYLON.VirtualJoystick(true);
+      
+      // Camera rotation joystick (right side)
+      rightJoystick = new BABYLON.VirtualJoystick(false);
+      
+      // Update movement in render loop
+      scene.registerBeforeRender(() => {
+          if (leftJoystick) {
+              const speed = 0.1;
+              camera.position.addInPlace(
+                  camera.getDirection(BABYLON.Axis.Z)
+                      .scale(leftJoystick.deltaPosition.y * speed)
+              );
+              camera.position.addInPlace(
+                  camera.getDirection(BABYLON.Axis.X)
+                      .scale(leftJoystick.deltaPosition.x * speed)
+              );
+          }
+          
+          if (rightJoystick) {
+              // Camera rotation based on right joystick
+              camera.rotation.y += rightJoystick.deltaPosition.x * 0.01;
+              camera.rotation.x += rightJoystick.deltaPosition.y * 0.01;
+          }
+      });
+  }
+  
+  scene.onPointerObservable.add((pointerInfo) => {
+    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+        const pickedMesh = pointerInfo.pickInfo.pickedMesh;
+        // Handle interaction (works for both mouse and touch)
+        if (pickedMesh && interactableObjects.includes(pickedMesh.name)) {
+            eventBus.publish('MESH_CLICKED', { meshName: pickedMesh.name });
+        }
+    }
+  });
+  
   console.log('Scene created successfully');
   return scene;
 }
+
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+
+
+
+
 
 // ============================================================================
 // SCENE COMPONENT SETUP
