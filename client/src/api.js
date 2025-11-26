@@ -5,7 +5,9 @@
  * Provides functions for authentication, console, tasks, etc.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const PROD_API = 'https://cyberforeniscs-arena-server.onrender.com';
+export const API_BASE = import.meta.env.VITE_API_URL || (isLocalhost ? '/api' : `${PROD_API}/api`);
 
 /**
  * Make authenticated API request
