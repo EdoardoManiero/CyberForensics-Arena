@@ -3,6 +3,8 @@
  * Main logic for the Scenario Editor Dashboard.
  */
 
+import { API_BASE } from '../api.js';
+
 class EditorApp {
     constructor() {
         this.scenarios = {};
@@ -19,7 +21,7 @@ class EditorApp {
 
     async loadScenarios() {
         try {
-            const response = await fetch('http://localhost:3000/api/scenarios');
+            const response = await fetch(`${API_BASE}/scenarios`);
             this.scenarios = await response.json();
         } catch (error) {
             console.error('Failed to load scenarios:', error);
@@ -235,7 +237,7 @@ class EditorApp {
         }
 
         try {
-            const response = await fetch('http://localhost:3000/api/scenarios', {
+            const response = await fetch(`${API_BASE}/scenarios`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
