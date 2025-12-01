@@ -30,7 +30,7 @@ export async function initDatabase() {
     // Ensure data directory exists
     if (!existsSync(DB_DIR)) {
       mkdirSync(DB_DIR, { recursive: true });
-      console.log(`     Created database directory: ${DB_DIR}`);
+      console.log(` Created database directory: ${DB_DIR}`);
     }
 
     // Open database (async)
@@ -39,17 +39,23 @@ export async function initDatabase() {
       driver: sqlite3.Database,
     });
 
-    // Set PRAGMAs
-    await db.exec('PRAGMA journal_mode = WAL;');
+    // Set PRAGMAs for concurrent access
+    // See: theory/sqlite-concurrency-pragmas.md for detailed explanation
+    await db.exec('PRAGMA journal_mode = WAL;');           // Concurrent reads/writes
+    await db.exec('PRAGMA busy_timeout = 30000;');         // Wait 30s for locks instead of failing
+    await db.exec('PRAGMA synchronous = NORMAL;');         // Faster writes, still safe with WAL
+    await db.exec('PRAGMA cache_size = 10000;');           // ~40MB cache for faster reads
+    await db.exec('PRAGMA temp_store = MEMORY;');          // Temp tables in RAM
 
-    console.log(`     Database opened: ${DB_PATH}`);
+    console.log(`Database opened: ${DB_PATH}`);
+   console.log('Configured for concurrent access (WAL + busy_timeout)');
 
     // Initialize schema (schema.js should export an async initSchema)
     await initSchema(db);
 
-    console.log('    Database initialized successfully');
+    console.log('Database initialized successfully');
   } catch (error) {
-    console.error('    Database initialization failed:', error);
+    console.error('Database initialization failed:', error);
     throw error;
   }
 }
@@ -72,6 +78,6 @@ export async function closeDatabase() {
   if (db) {
     await db.close();
     db = null;
-    console.log('     Database connection closed');
+   console.log('Database connection closed');
   }
 }

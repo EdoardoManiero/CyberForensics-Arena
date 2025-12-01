@@ -30,14 +30,14 @@ export async function initSchema(db) {
   try {
     const tableInfo = await db.all("PRAGMA table_info(users)");
     const hasColumn = tableInfo.some(col => col.name === 'tutorial_completed');
-    
+
     if (!hasColumn) {
       await db.exec(`
         ALTER TABLE users ADD COLUMN tutorial_completed INTEGER NOT NULL DEFAULT 0
       `);
-      console.log('    Added tutorial_completed column to users table');
+      console.log('Added tutorial_completed column to users table');
     } else {
-      console.log('    tutorial_completed column already exists');
+      console.log('tutorial_completed column already exists');
     }
   } catch (error) {
     console.warn('Error checking/adding tutorial_completed column:', error.message);
@@ -90,10 +90,10 @@ export async function initSchema(db) {
       CREATE INDEX IF NOT EXISTS idx_task_completions_user_id 
       ON task_completions(user_id)
     `);
-    console.log('    Created index on task_completions.user_id');
+    console.log('Created index on task_completions.user_id');
   } catch (error) {
     // Index might already exist, that's okay
-    console.log('        Index on task_completions.user_id already exists or error:', error.message);
+  console.log('Index on task_completions.user_id already exists or error:', error.message);
   }
 
   // Badges table
@@ -111,14 +111,14 @@ export async function initSchema(db) {
   try {
     const tableInfo = await db.all("PRAGMA table_info(badges)");
     const hasColumn = tableInfo.some(col => col.name === 'badge_points');
-    
+
     if (!hasColumn) {
       await db.exec(`
         ALTER TABLE badges ADD COLUMN badge_points INTEGER NOT NULL DEFAULT 0
       `);
-      console.log('    Added badge_points column to badges table');
+      console.log('Added badge_points column to badges table');
     } else {
-      console.log('    badge_points column already exists');
+      console.log('badge_points column already exists');
     }
   } catch (error) {
     console.warn('Error checking/adding badge_points column:', error.message);
@@ -192,10 +192,21 @@ export async function initSchema(db) {
     )
   `);
 
+  // User unlocked hints table (persistent hints)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS user_unlocked_hints (
+      user_id INTEGER NOT NULL,
+      task_id TEXT NOT NULL,
+      unlocked_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      PRIMARY KEY (user_id, task_id)
+    )
+  `);
+
   // Initialize badges with points
   await initializeBadges(db);
 
-  console.log('     Database schema initialized');
+ console.log('Database schema initialized');
 }
 
 /**
@@ -220,12 +231,12 @@ async function initializeBadges(db) {
 
   for (const badge of allBadges) {
     const existing = await db.get('SELECT id, badge_points FROM badges WHERE code = ?', badge.code);
-    
+
     if (existing) {
       // Update points if badge exists but points are different
       if (existing.badge_points !== badge.points) {
         await db.run('UPDATE badges SET badge_points = ? WHERE code = ?', badge.points, badge.code);
-        console.log(`    Updated badge "${badge.code}" points to ${badge.points}`);
+        console.log(`Updated badge "${badge.code}" points to ${badge.points}`);
       }
     } else {
       // Insert new badge
@@ -233,7 +244,7 @@ async function initializeBadges(db) {
         INSERT INTO badges (code, name, description, badge_points)
         VALUES (?, ?, ?, ?)
       `, badge.code, badge.name, badge.description, badge.points);
-      console.log(`    Created badge "${badge.code}" with ${badge.points} points`);
+      console.log(`Created badge "${badge.code}" with ${badge.points} points`);
     }
   }
 }
