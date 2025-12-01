@@ -98,7 +98,7 @@ class EditorApp {
                 </div>
                 <div class="form-group">
                     <label>Hint</label>
-                    <textarea class="form-control" rows="2" onchange="window.editorApp.updateTask(${index}, 'hint', this.value)">${task.hint || ''}</textarea>
+                    <textarea class="form-control" rows="2" placeholder="Leave empty for no hint" onchange="window.editorApp.updateTask(${index}, 'hint', this.value)">${task.hint || ''}</textarea>
                 </div>
                 <div class="form-group">
                     <label>Hint Cost</label>
