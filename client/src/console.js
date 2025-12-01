@@ -130,6 +130,9 @@ const VFSManager = {
     return { dirNode: node, leaf: parts[parts.length - 1] };
   },
 
+  // Cache for last directory listing (to avoid double API calls during autocomplete)
+  _lastDirCache: { path: null, entries: new Set(), scenarioCode: null },
+
   async listCandidates(partial, base, scenarioCode) {
     // First check local VFS (for mounted devices and files created via redirection)
     const slash = partial.lastIndexOf('/');
@@ -157,6 +160,13 @@ const VFSManager = {
           const serverEntries = result.output.split('\n').filter(Boolean);
           const serverChoices = serverEntries.filter(name => name.startsWith(prefix));
 
+          // Cache the directory listing for getNodeType to use
+          this._lastDirCache = {
+            path: dirPath,
+            entries: new Set(serverEntries),
+            scenarioCode
+          };
+
           // Merge local and server choices, removing duplicates
           const allChoices = [...new Set([...localChoices, ...serverChoices])];
           return allChoices;
@@ -177,7 +187,19 @@ const VFSManager = {
       return localNode.type;
     }
 
-    // Query server if we have a scenario
+    // Check cache from recent listCandidates call (avoids second API request)
+    // If the path's parent directory was just listed, we know if this entry exists
+    const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
+    const basename = path.split('/').pop();
+    if (this._lastDirCache.path === parentPath && 
+        this._lastDirCache.scenarioCode === scenarioCode &&
+        this._lastDirCache.entries.has(basename)) {
+      // Entry exists in cached directory listing - assume it's a directory
+      // (files would typically have extensions, and this is for autocomplete trailing slash)
+      return 'dir';
+    }
+
+    // Query server if we have a scenario (fallback if cache miss)
     if (scenarioCode) {
       try {
         const result = await consoleAPI.execute(scenarioCode, `ls "${path}"`);
@@ -188,7 +210,6 @@ const VFSManager = {
           const entries = result.output.split('\n').filter(Boolean);
           // If ls returns a single entry that matches the basename, it's a file
           // Otherwise it's a directory (or empty directory)
-          const basename = path.split('/').pop();
           if (entries.length === 1 && entries[0] === basename) {
             return 'file';
           }
@@ -815,8 +836,8 @@ const CommandExecutor = {
     const currentScenario = getCurrentScenario();
     const scenarioCode = currentScenario?.id;
 
-    // Commands that need backend VFS access
-    const vfsCommands = ['ls', 'cd', 'pwd', 'cat', 'grep', 'mkdir', 'touch', 'rm'];
+    // Commands that need backend VFS access (including forensic commands)
+    const vfsCommands = ['ls', 'cd', 'pwd', 'cat', 'grep', 'mkdir', 'touch', 'rm', 'sha256sum', 'dd', 'cp'];
 
     // Check if this is a VFS command and we have a scenario
     if (vfsCommands.includes(cmd) && scenarioCode) {
@@ -967,6 +988,7 @@ const TaskManager = {
 
   async notifyCompletion(task) {
     const prevTitle = task.title;
+    let shouldAdvance = false;
 
     // Submit task to backend if task has an ID
     if (task.id) {
@@ -974,7 +996,11 @@ const TaskManager = {
         // Build answer from task checkCommand and checkArgs
         let answer = task.checkCommand;
         if (task.checkArgs && task.checkArgs.length > 0) {
-          answer += ' ' + task.checkArgs.join(' ');
+          // Quote arguments that contain spaces so server can parse them correctly
+          const quotedArgs = task.checkArgs.map(arg => 
+            arg.includes(' ') ? `"${arg}"` : arg
+          );
+          answer += ' ' + quotedArgs.join(' ');
         }
 
         console.log('[Console] Submitting task', task.id, 'with answer:', answer);
@@ -982,6 +1008,8 @@ const TaskManager = {
         console.log('[Console] Task submission result:', result);
 
         if (result.correct) {
+          shouldAdvance = true;
+
           // Sync points with server's authoritative total score (includes badge points)
           // Security: Always use server-provided newTotalScore, never calculate client-side
           if (result.newTotalScore !== undefined) {
@@ -1037,21 +1065,26 @@ const TaskManager = {
           }
         } else {
           console.warn('[Console] Task submission marked as incorrect');
+          TerminalUI.writeLine('Server validation failed. Please check your command.');
         }
       } catch (error) {
         console.error('[Console] Error submitting task to backend:', error);
         console.error('[Console] Error details:', error.message, error.stack);
-        // Continue with local completion even if backend submission fails
+        // Do NOT advance if backend submission fails
+        TerminalUI.writeLine('Error submitting task to server. Please try again.');
       }
     } else {
-      console.warn('[Console] Task has no ID, cannot submit to backend:', task);
+      // Local task (no ID), always advance if check passed locally
+      shouldAdvance = true;
     }
 
-    if (advanceTask) advanceTask();
-    // Note: updateTaskHUD() removed - taskHud now listens to PROGRESS_UPDATED event from taskManager
+    if (shouldAdvance) {
+      if (advanceTask) advanceTask();
+      // Note: updateTaskHUD() removed - taskHud now listens to PROGRESS_UPDATED event from taskManager
 
-    // Task completion is already shown via toast notification - no need for console clutter
-    if (notifyComplete) notifyComplete(prevTitle, task.id);
+      // Task completion is already shown via toast notification - no need for console clutter
+      if (notifyComplete) notifyComplete(prevTitle, task.id);
+    }
   },
 
   arraysMatch(a, b) {
@@ -1219,11 +1252,26 @@ function registerBuiltinCommands() {
   // mount
   registerCommand('mount', async (args) => {
     if (args.length < 2) {
-      return 'Usage: mount <device> <mountpoint>\nExample: mount /dev/sdb1 /mnt/evidence';
+      return 'Usage: mount [-o ro] <device> <mountpoint>\nExample: mount /dev/sdb1 /mnt/evidence\n         mount -o ro /forensic/evidence.img /mnt/evidence';
     }
 
-    const device = args[0];
-    const mountPoint = args[1];
+    // Parse mount options (-o ro for read-only)
+    let device, mountPoint;
+    let readOnly = false;
+    
+    if (args[0] === '-o' && args[1] === 'ro') {
+      // mount -o ro <device> <mountpoint>
+      if (args.length < 4) {
+        return 'Usage: mount -o ro <device> <mountpoint>';
+      }
+      readOnly = true;
+      device = args[2];
+      mountPoint = args[3];
+    } else {
+      // mount <device> <mountpoint>
+      device = args[0];
+      mountPoint = args[1];
+    }
 
     // Get current scenario
     const currentScenario = getCurrentScenario();
@@ -1238,17 +1286,22 @@ function registerBuiltinCommands() {
     // and prevent task completion if mount fails
     const result = await devicesAPI.mountDevice(scenarioCode, device, mountPoint);
 
+    // Check if this is a forensic image or regular device
+    const isForensicImage = device.startsWith('/forensic/') && device.endsWith('.img');
+    
     // Update local cache
     const devices = window.attachedDevices || [];
-    const deviceName = device.replace('/dev/', '').replace(/1$/, '');
-
-    for (const dev of devices) {
-      if (dev.name === deviceName && dev.partitions) {
-        const part = dev.partitions.find(p => `/dev/${p.name}` === device);
-        if (part) {
-          part.mounted = true;
-          part.mountPoint = mountPoint;
-          break;
+    
+    if (!isForensicImage) {
+      const deviceName = device.replace('/dev/', '').replace(/1$/, '');
+      for (const dev of devices) {
+        if (dev.name === deviceName && dev.partitions) {
+          const part = dev.partitions.find(p => `/dev/${p.name}` === device);
+          if (part) {
+            part.mounted = true;
+            part.mountPoint = mountPoint;
+            break;
+          }
         }
       }
     }
@@ -1266,14 +1319,21 @@ function registerBuiltinCommands() {
 
     // Get device content from server result or local cache
     const devicesResult = await devicesAPI.getDevices(scenarioCode);
-    const serverDevice = devicesResult.devices?.find(d => d.name === deviceName);
+    // For forensic images, get the most recently attached device's content
+    const serverDevice = isForensicImage 
+      ? devicesResult.devices?.[devicesResult.devices.length - 1]
+      : devicesResult.devices?.find(d => d.name === device.replace('/dev/', '').replace(/1$/, ''));
+      
     if (serverDevice && serverDevice.content && current.children) {
       for (const [name, data] of Object.entries(serverDevice.content)) {
         current.children[name] = VFSManager.makeFile(data);
       }
     }
 
-    return result.message || `Mounted ${device} on ${mountPoint}`;
+    const mountMsg = readOnly 
+      ? `Mounted ${device} on ${mountPoint} (read-only)` 
+      : `Mounted ${device} on ${mountPoint}`;
+    return result.message || mountMsg;
   });
 
   // umount
