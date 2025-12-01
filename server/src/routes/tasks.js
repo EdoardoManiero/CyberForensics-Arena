@@ -25,7 +25,7 @@ let taskLookupMap = null;
 function loadScenariosData() {
   try {
     scenariosData = JSON.parse(readFileSync(SCENARIOS_PATH, 'utf-8'));
-    
+
     // Build task lookup map: taskId -> { task, scenarioCode }
     taskLookupMap = new Map();
     for (const [code, scenario] of Object.entries(scenariosData)) {
@@ -37,8 +37,8 @@ function loadScenariosData() {
         }
       }
     }
-    
-    console.log(`    Loaded ${taskLookupMap.size} tasks into lookup map`);
+
+    console.log(`Loaded ${taskLookupMap.size} tasks into lookup map`);
   } catch (error) {
     console.error('Error loading scenarios:', error);
   }
@@ -85,7 +85,7 @@ router.post('/:taskId/submit', authenticate, async (req, res) => {
 
     // Check if already completed
     const db = getDb();
-    
+
     // Get scenario and task from DB (or create if not exists)
     let scenarioRow = await db.get('SELECT id FROM scenarios WHERE code = ?', scenarioCode);
     if (!scenarioRow) {
@@ -146,7 +146,7 @@ router.post('/:taskId/submit', authenticate, async (req, res) => {
 
     // Validate answer server-side
     const validation = validateAnswer(task, answer);
-    
+
     // Calculate score (server-side only, never trust client)
     const scoreAwarded = validation.correct ? (task.points || 0) : 0;
 
@@ -178,7 +178,7 @@ router.post('/:taskId/submit', authenticate, async (req, res) => {
     // Check for badge awards (if scenario completed)
     const badgesUnlocked = [];
     let pointsAwardedFromBadges = 0;
-    
+
     if (validation.correct) {
       // Check if all tasks in scenario are completed
       const scenario = scenariosData[scenarioCode];
@@ -219,7 +219,7 @@ router.post('/:taskId/submit', authenticate, async (req, res) => {
         FROM task_completions WHERE user_id = ?
       `, userId);
       const finalTotalScore = updatedTaskScoreResult.total + updatedBadgePointsResult.total;
-      
+
       res.json({
         success: true,
         correct: validation.correct,
@@ -395,7 +395,7 @@ async function checkSpeedRunnerBadge(db, userId, scenarioId) {
 async function checkHintFreeExpertBadge(db, userId, scenarioCode) {
   // Get user stats
   let userStats = await db.get('SELECT scenario_hints_used FROM user_stats WHERE user_id = ?', userId);
-  
+
   if (!userStats) {
     // No stats means no hints used - create stats record
     await db.run(`
@@ -461,7 +461,7 @@ async function checkHintFreeExpertBadge(db, userId, scenarioCode) {
 async function trackHintUsage(db, userId, scenarioCode) {
   // Get or create user stats
   let userStats = await db.get('SELECT hints_used_count, scenario_hints_used FROM user_stats WHERE user_id = ?', userId);
-  
+
   if (!userStats) {
     // Create new stats record
     await db.run(`
@@ -492,6 +492,49 @@ async function trackHintUsage(db, userId, scenarioCode) {
 }
 
 /**
+ * Parse command line arguments respecting quotes
+ * @param {string} input - Command string to parse
+ * @returns {Array<string>} Array of command and arguments
+ */
+function parseCommandArgs(input) {
+  const args = [];
+  let current = '';
+  let inQuote = false;
+  let quoteChar = '';
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+
+    if ((char === '"' || char === "'") && (!inQuote || quoteChar === char)) {
+      if (inQuote && quoteChar === char) {
+        // Closing quote
+        inQuote = false;
+        quoteChar = '';
+      } else if (!inQuote) {
+        // Opening quote
+        inQuote = true;
+        quoteChar = char;
+      } else {
+        current += char;
+      }
+    } else if (char === ' ' && !inQuote) {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (current) {
+    args.push(current);
+  }
+
+  return args;
+}
+
+/**
  * Validate answer against task requirements
  * This is where all validation logic lives - never exposed to client
  */
@@ -508,13 +551,16 @@ function validateAnswer(task, answer) {
     return { correct: false };
   }
 
-  // Handle command-based tasks
+  // Handle console command tasks (checkType is null but checkCommand is set)
   if (task.checkCommand) {
-    // Command-based validation
-    // Answer format: "command arg1 arg2" or just "command"
-    const parts = answer.trim().split(/\s+/);
-    const cmd = parts[0];
-    const args = parts.slice(1);
+    // Parse the answer into command and args
+    const parsedArgs = parseCommandArgs(answer);
+    if (parsedArgs.length === 0) {
+      return { correct: false };
+    }
+
+    const cmd = parsedArgs[0];
+    const args = parsedArgs.slice(1);
 
     // Check command matches
     if (cmd !== task.checkCommand) {
@@ -523,7 +569,7 @@ function validateAnswer(task, answer) {
 
     // Check args if specified
     if (task.checkArgs && task.checkArgs.length > 0) {
-      // Normalize paths for comparison
+      // Normalize paths for comparison (remove trailing slashes)
       const normalizedArgs = args.map(arg => arg.replace(/\/$/, ''));
       const normalizedExpected = task.checkArgs.map(arg => arg.replace(/\/$/, ''));
 
@@ -659,16 +705,16 @@ router.get('/:taskId/hint', authenticate, async (req, res) => {
         FROM badge_points_awarded WHERE user_id = ?
       `, userId);
       const queryTime = Date.now() - queryStart;
-      
+
       if (queryTime > 100) {
         console.warn(`[Hint] Slow points query: ${queryTime}ms for user ${userId}`);
       }
-      
+
       const currentPoints = taskScoreResult.total + badgePointsResult.total;
 
       // Check if user has enough points
       if (currentPoints < hintCost) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Insufficient points',
           required: hintCost,
           current: currentPoints
@@ -686,7 +732,7 @@ router.get('/:taskId/hint', authenticate, async (req, res) => {
     if (totalTime > 500) {
       console.warn(`[Hint] Slow hint request: ${totalTime}ms for task ${taskId}`);
     }
-    
+
     res.json({
       hint: task.hint,
       hintCost: hintCost
@@ -697,4 +743,4 @@ router.get('/:taskId/hint', authenticate, async (req, res) => {
   }
 });
 
-export { router as taskRoutes };
+export { router as taskRoutes, loadScenariosData };

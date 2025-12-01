@@ -123,6 +123,10 @@ router.get('/', authenticate, async (req, res) => {
  * Mount a device
  * POST /api/devices/mount
  * Body: { scenarioCode, device, mountPoint }
+ * 
+ * Supports:
+ * - Regular device paths: /dev/sdb1, /dev/sdc1
+ * - Forensic image paths: /forensic/evidence.img, /forensic/memdump.img
  */
 router.post('/mount', authenticate, async (req, res) => {
   try {
@@ -135,14 +139,33 @@ router.post('/mount', authenticate, async (req, res) => {
 
     const db = getDb();
     
-    // Extract device name from device path (e.g., /dev/sdc1 -> sdc)
-    const deviceName = device.replace('/dev/', '').replace(/1$/, '');
+    let deviceRecord;
+    let deviceName;
     
-    // Find the device
-    const deviceRecord = await db.get(`
-      SELECT * FROM user_devices 
-      WHERE user_id = ? AND scenario_code = ? AND device_name = ?
-    `, userId, scenarioCode, deviceName);
+    // Check if this is a forensic image path (e.g., /forensic/evidence.img)
+    if (device.startsWith('/forensic/') && device.endsWith('.img')) {
+      // For forensic images, find the most recently attached device for this scenario
+      // This simulates mounting a forensic copy that was created with dd
+      deviceRecord = await db.get(`
+        SELECT * FROM user_devices 
+        WHERE user_id = ? AND scenario_code = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `, userId, scenarioCode);
+      
+      if (deviceRecord) {
+        deviceName = deviceRecord.device_name;
+      }
+    } else {
+      // Extract device name from device path (e.g., /dev/sdc1 -> sdc)
+      deviceName = device.replace('/dev/', '').replace(/1$/, '');
+      
+      // Find the device
+      deviceRecord = await db.get(`
+        SELECT * FROM user_devices 
+        WHERE user_id = ? AND scenario_code = ? AND device_name = ?
+      `, userId, scenarioCode, deviceName);
+    }
 
     if (!deviceRecord) {
       return res.status(404).json({ error: 'Device not found. You must attach the device first.' });

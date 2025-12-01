@@ -329,6 +329,24 @@ function executeCommand(cmd, args, vfs, cwd, scenarioCode) {
       if (scenariosData && scenariosData[scenarioCode] && scenariosData[scenarioCode].customCommands) {
         const customCmd = scenariosData[scenarioCode].customCommands.find(c => c.name === cmd);
         if (customCmd) {
+          // Handle commands that require specific arguments
+          if (customCmd.requiresArgs && customCmd.validArgs) {
+            // Join args to match against validArgs keys
+            const argsKey = args.join(' ');
+            
+            if (args.length === 0) {
+              // No args provided - show usage/help output
+              output = customCmd.output || `Usage: ${cmd} <args>`;
+            } else if (customCmd.validArgs[argsKey]) {
+              // Exact match found in validArgs
+              output = customCmd.validArgs[argsKey];
+            } else {
+              // Args provided but not valid - show error with usage
+              error = `${cmd}: invalid arguments\n${customCmd.output || ''}`;
+            }
+            break;
+          }
+          
           // Support simple templating: {arg0}, {arg1}, etc.
           let result = customCmd.output || '';
           args.forEach((arg, idx) => {
