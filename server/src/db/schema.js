@@ -5,6 +5,8 @@
  * Safe to run multiple times (uses IF NOT EXISTS).
  */
 
+import bcrypt from 'bcrypt';
+
 /**
  * Initialize database schema
  * @param {import('sqlite').Database} db - SQLite database instance
@@ -206,6 +208,9 @@ export async function initSchema(db) {
   // Initialize badges with points
   await initializeBadges(db);
 
+  // Create default user for testing/demo
+  await createDefaultUser(db);
+
  console.log('Database schema initialized');
 }
 
@@ -246,5 +251,39 @@ async function initializeBadges(db) {
       `, badge.code, badge.name, badge.description, badge.points);
       console.log(`Created badge "${badge.code}" with ${badge.points} points`);
     }
+  }
+}
+
+/**
+ * Create default user for testing/demo purposes
+ * This user is automatically created on server startup if it doesn't exist
+ * @param {import('sqlite').Database} db - SQLite database instance
+ */
+async function createDefaultUser(db) {
+  const defaultEmail = 'user@mail.com';
+  const defaultPassword = 'useruser';
+  const defaultDisplayName = 'Demo User';
+
+  try {
+    // Check if default user already exists
+    const existing = await db.get('SELECT id FROM users WHERE email = ?', defaultEmail);
+    
+    if (existing) {
+      console.log(`Default user "${defaultEmail}" already exists (id: ${existing.id})`);
+      return;
+    }
+
+    // Hash password using bcrypt (same as registration)
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+    // Insert default user
+    const result = await db.run(`
+      INSERT INTO users (email, password_hash, display_name, tutorial_completed)
+      VALUES (?, ?, ?, 0)
+    `, defaultEmail, passwordHash, defaultDisplayName);
+
+    console.log(`Created default user "${defaultEmail}" (id: ${result.lastID})`);
+  } catch (error) {
+    console.warn('Error creating default user:', error.message);
   }
 }
