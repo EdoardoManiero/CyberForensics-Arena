@@ -193,6 +193,22 @@ export function isLoading() {
 }
 
 /**
+ * Check if current user is an admin
+ * @returns {boolean} - True if user is authenticated and has admin role
+ */
+export function isAdmin() {
+  return sessionState.isAuthenticated && sessionState.user?.role === 'admin';
+}
+
+/**
+ * Get current user's role
+ * @returns {string|null} - User's role or null if not authenticated
+ */
+export function getUserRole() {
+  return sessionState.user?.role || null;
+}
+
+/**
  * Subscribe to session changes
  */
 export function onSessionChange(callback) {
