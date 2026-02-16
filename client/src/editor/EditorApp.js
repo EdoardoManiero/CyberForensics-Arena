@@ -1,27 +1,94 @@
 /**
  * EditorApp.js
  * Main logic for the Scenario Editor Dashboard.
+ * 
+ * Admin-only page - requires authentication and admin role.
  */
 
-import { API_BASE } from '../api.js';
+import { API_BASE, authAPI } from '../api.js';
 
 class EditorApp {
     constructor() {
         this.scenarios = {};
         this.currentScenarioId = null;
+        this.user = null;
 
         this.init();
     }
 
     async init() {
+        // Check authentication and admin role before loading
+        const isAuthorized = await this.checkAuth();
+        if (!isAuthorized) {
+            return; // Don't proceed if not authorized
+        }
+        
         await this.loadScenarios();
         this.renderScenarioList();
         this.setupEventListeners();
     }
+    
+    /**
+     * Check if user is authenticated and has admin role
+     * Redirects to main page if not authorized
+     */
+    async checkAuth() {
+        try {
+            const user = await authAPI.getMe();
+            this.user = user;
+            
+            if (!user) {
+                this.showAccessDenied('Please log in to access the Scenario Editor.');
+                return false;
+            }
+            
+            if (user.role !== 'admin') {
+                this.showAccessDenied('Admin access required. Only administrators can access the Scenario Editor.');
+                return false;
+            }
+            
+            console.log('[EditorApp] Admin access granted for:', user.email);
+            return true;
+        } catch (error) {
+            console.error('[EditorApp] Auth check failed:', error);
+            this.showAccessDenied('Authentication failed. Please log in again.');
+            return false;
+        }
+    }
+    
+    /**
+     * Show access denied message and redirect
+     */
+    showAccessDenied(message) {
+        const app = document.getElementById('app');
+        if (app) {
+            app.innerHTML = `
+                <div class="access-denied">
+                    <div class="access-denied__content">
+                        <i class="fas fa-lock"></i>
+                        <h1>Access Denied</h1>
+                        <p>${message}</p>
+                        <a href="./" class="btn btn-primary">
+                            <i class="fas fa-home"></i> Return to Game
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+    }
 
     async loadScenarios() {
         try {
-            const response = await fetch(`${API_BASE}/scenarios`);
+            // Use /full endpoint to get complete data including hints and solutionValue
+            const response = await fetch(`${API_BASE}/scenarios/full`, {
+                credentials: 'include' // Include cookies for admin auth
+            });
+            
+            if (response.status === 401 || response.status === 403) {
+                this.showAccessDenied('Admin access required to load scenario data.');
+                return;
+            }
+            
             this.scenarios = await response.json();
         } catch (error) {
             console.error('Failed to load scenarios:', error);
@@ -109,29 +176,36 @@ class EditorApp {
                 <div class="form-group">
                     <label>Check Type</label>
                     <select onchange="window.editorApp.updateTask(${index}, 'checkType', this.value)">
-                        <option value="command" ${(!task.checkType || task.checkType === 'command') ? 'selected' : ''}>Command</option>
+                        <option value="command" ${(!task.checkType || task.checkType === 'command' || task.checkType === null) ? 'selected' : ''}>Command</option>
                         <option value="interaction" ${task.checkType === 'interaction' ? 'selected' : ''}>Interaction</option>
+                        <option value="flag" ${task.checkType === 'flag' ? 'selected' : ''}>Flag (CTF)</option>
                     </select>
                 </div>
 
                 <!-- Command Fields -->
-                <div class="form-group" style="${task.checkType === 'interaction' ? 'display:none' : ''}">
+                <div class="form-group" style="${(task.checkType === 'interaction' || task.checkType === 'flag') ? 'display:none' : ''}">
                     <label>Check Command</label>
                     <input type="text" value="${task.checkCommand || ''}" onchange="window.editorApp.updateTask(${index}, 'checkCommand', this.value)">
                 </div>
-                <div class="form-group" style="${task.checkType === 'interaction' ? 'display:none' : ''}">
+                <div class="form-group" style="${(task.checkType === 'interaction' || task.checkType === 'flag') ? 'display:none' : ''}">
                     <label>Check Args (comma separated)</label>
                     <input type="text" value="${(task.checkArgs || []).join(', ')}" onchange="window.editorApp.updateTask(${index}, 'checkArgs', this.value)">
                 </div>
 
                 <!-- Interaction Fields -->
-                <div class="form-group" style="${(!task.checkType || task.checkType === 'command') ? 'display:none' : ''}">
+                <div class="form-group" style="${task.checkType !== 'interaction' ? 'display:none' : ''}">
                     <label>Interaction Target (Object ID)</label>
                     <input type="text" value="${task.interactionTarget || ''}" onchange="window.editorApp.updateTask(${index}, 'interactionTarget', this.value)">
                 </div>
-                <div class="form-group" style="${(!task.checkType || task.checkType === 'command') ? 'display:none' : ''}">
+                <div class="form-group" style="${task.checkType !== 'interaction' ? 'display:none' : ''}">
                     <label>On Interact Logic (JSON)</label>
                     <textarea class="code-editor" rows="4" onchange="window.editorApp.updateTask(${index}, 'onInteract', this.value)">${task.onInteract ? JSON.stringify(task.onInteract, null, 2) : ''}</textarea>
+                </div>
+
+                <!-- Flag Fields (CTF-style tasks) -->
+                <div class="form-group" style="${task.checkType !== 'flag' ? 'display:none' : ''}">
+                    <label>Solution Value (Flag/Answer)</label>
+                    <input type="text" value="${task.solutionValue || ''}" placeholder="The correct flag/answer" onchange="window.editorApp.updateTask(${index}, 'solutionValue', this.value)">
                 </div>
             `;
             list.appendChild(div);
@@ -156,6 +230,11 @@ class EditorApp {
             }
 
             this.scenarios[this.currentScenarioId].tasks[index][field] = val;
+
+            // Update hasHint when hint field changes
+            if (field === 'hint') {
+                this.scenarios[this.currentScenarioId].tasks[index].hasHint = !!(val && val.trim() !== '');
+            }
 
             // Re-render if checkType changes to toggle fields
             if (field === 'checkType') {
@@ -183,7 +262,10 @@ class EditorApp {
             hintCost: 2,
             checkType: 'command',
             checkCommand: '',
-            checkArgs: []
+            checkArgs: [],
+            interactionTarget: null,
+            onInteract: null,
+            solutionValue: ''
         };
 
         this.scenarios[this.currentScenarioId].tasks.push(newTask);
@@ -242,10 +324,20 @@ class EditorApp {
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include', // Include cookies for authentication
                 body: JSON.stringify({ scenarios: this.scenarios })
             });
 
             const result = await response.json();
+            if (response.status === 401) {
+                alert('Session expired. Please log in again.');
+                window.location.href = './';
+                return;
+            }
+            if (response.status === 403) {
+                alert('Access denied. Admin privileges required.');
+                return;
+            }
             if (result.success) {
                 alert('Saved successfully!');
             } else {
