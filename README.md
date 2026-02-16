@@ -8,6 +8,7 @@
 - [API Documentation](#api-documentation)
 - [Database Schema](#database-schema)
 - [Teachers' Guide: Adding Scenarios](#teachers-guide-adding-scenarios)
+- [Admin Dashboard](#admin-dashboard)
 - [Technologies](#technologies)
 - [Contributions and Feedback](#contributions-and-feedback)
 - [Contact and Support](#contact-and-support)
@@ -55,7 +56,7 @@ An interactive console that offers:
 
 Three **independent investigative scenarios** with progressive tasks:
 
-**1. File System Forensic** (6 tasks)
+**1. File System Forensic** (17 tasks)
 - Connect external hard drive
 - List devices with `lsblk`
 - Mount the partition
@@ -63,14 +64,14 @@ Three **independent investigative scenarios** with progressive tasks:
 - Read suspicious log files
 - Use `grep` to extract critical information
 
-**2. Network Forensic** (5 tasks)
+**2. Network Forensic** (14 tasks)
 - Connect to remote server via SSH
 - List system logs
 - Read authentication logs
 - Search for failed login attempts
 - Analyze traffic capture with tcpdump
 
-**3. Memory Forensic** (6 tasks)
+**3. Memory Forensic** (15 tasks)
 - Connect hard drive with memory dump
 - Verify connected devices
 - Mount the partition with dump
@@ -86,6 +87,8 @@ Three **independent investigative scenarios** with progressive tasks:
 - **Incentivized Exploration**: 3D environment that invites discovery
 - **Clear Instructions**: Visible objectives in the HUD in real time
 - **Interactive Tutorial**: Initial guide for new users
+- **Leaderboard**: Compete with other users based on total score
+- **Badges**: Earn achievements for completing scenarios and special challenges
 
 ###        5. Task Management System
 
@@ -93,6 +96,36 @@ Three **independent investigative scenarios** with progressive tasks:
 - Progress bar for completion
 - Toast notifications for real-time feedback
 - Scenario management via JSON file
+
+###      6. Mini-Games
+
+Interactive hacking sequences that add engagement:
+
+**Memory Dump Analyzer (Decryption Game)**
+- Search for hex signatures in simulated memory dumps
+- Find PE headers and malware signatures
+- Time-limited challenge with hints
+
+**Signal Tracing Game**
+- Trace network signals through a visual grid
+- Navigate obstacles to reach the target
+- Tests pattern recognition and planning skills
+
+
+###      7. Leaderboard System
+
+- Real-time leaderboard showing top performers
+- Combined scoring from task completions and badge points
+- Cached for performance (10-second TTL)
+- Displays display name, total score, and tasks completed
+
+###      8. Event Tracking & Analytics
+
+Comprehensive tracking system for educational research:
+- Anonymous participant IDs for privacy
+- Tracks scenario starts/completions, commands executed, hints used
+- Mini-game performance metrics
+- Exportable data for research analysis
 
 ---
 
@@ -217,6 +250,8 @@ npm run build
 CyberForensics-Arena/
 ├── client/                   # Frontend Application (Vite + Babylon.js)
 │   ├── index.html            # HTML entry point
+│   ├── admin.html            # Admin dashboard entry
+│   ├── editor.html           # Scenario editor entry
 │   ├── package.json          # Client dependencies
 │   ├── vite.config.js        # Vite configuration
 │   ├── public/               # Static assets (3D models, scenarios)
@@ -226,14 +261,42 @@ CyberForensics-Arena/
 │       ├── interaction.js    # User interaction handling
 │       ├── console.js        # Simulated Linux console
 │       ├── taskManager.js    # Task management logic
-│       └── ...
+│       ├── taskHud.js        # Task HUD UI
+│       ├── eventBus.js       # Pub/Sub communication
+│       ├── leaderboard.js    # Leaderboard UI
+│       ├── profile.js        # User profile
+│       ├── pointsBadge.js    # Points/badge display
+│       ├── api.js            # API client
+│       ├── miniGames/        # Mini-game modules
+│       │   ├── MiniGameManager.js
+│       │   ├── DecryptionGame.js
+│       │   └── SignalTracingGame.js
+│       ├── admin/            # Admin dashboard
+│       │   ├── AdminApp.js
+│       │   └── admin.css
+│       └── editor/           # Scenario editor
+│           ├── EditorApp.js
+│           └── editor.css
 │
 ├── server/                   # Backend Application (Node.js + Express)
 │   ├── package.json          # Server dependencies
+│   ├── jest.config.js        # Test configuration
 │   ├── src/
 │   │   ├── index.js          # Server entry point
+│   │   ├── config/           # Configuration (Passport.js)
+│   │   ├── middleware/       # Auth, rate limiting, participant ID
 │   │   ├── routes/           # API endpoints
-│   │   ├── db/               # Database connection
+│   │   │   ├── auth.js       # Authentication
+│   │   │   ├── tasks.js      # Task management
+│   │   │   ├── scenarios.js  # Scenario data
+│   │   │   ├── console.js    # Console commands
+│   │   │   ├── devices.js    # Device management
+│   │   │   ├── leaderboard.js # Leaderboard
+│   │   │   ├── admin.js      # Admin endpoints
+│   │   │   └── tracking.js   # Event tracking
+│   │   ├── services/         # Business logic services
+│   │   │   └── eventLog.js   # Event logging service
+│   │   ├── db/               # Database connection & schema
 │   │   └── vfs/              # Virtual File System logic
 │   └── data/                 # SQLite database & scenarios.json
 │
@@ -253,6 +316,7 @@ taskManager.js (task flow)
               console.js (command execution)
               taskHud.js (UI update)
               eventBus.js (communication)
+              miniGameManager.js (mini-games)
 ```
 
 ###      Event Bus System
@@ -274,12 +338,18 @@ The backend is built with **Node.js** and **Express**, using **SQLite** for pers
 - **Server-Side Validation**: All task answers are validated on the server. The client never receives the correct answers, preventing cheating by inspecting network traffic.
 - **Session Management**: Uses `express-session` with `Passport.js` for secure user authentication.
 - **Input Sanitization**: All inputs are treated as untrusted.
+- **Role-Based Access**: Admin endpoints protected by `requireAdmin` middleware.
+- **Rate Limiting**: Prevents abuse of API endpoints.
 
 ###      Virtual File System (VFS)
 The backend maintains a persistent **Virtual File System** for each user/scenario.
 - **State Persistence**: The VFS state (created files, directories) is saved in the database (`user_vfs_state` table).
 - **Isolation**: Each user has their own isolated file system instance.
 - **Dynamic Mounting**: Devices and evidence are dynamically "mounted" into the VFS when the user interacts with 3D objects.
+
+###      Caching Strategy
+- **Leaderboard Cache**: 10-second TTL to reduce database load (see `theory/leaderboard-caching.md`)
+- **Scenarios Cache**: Scenario definitions cached in memory to avoid repeated file I/O
 
 ---
 
@@ -308,6 +378,38 @@ The API is RESTful and uses JSON for data exchange. All protected routes require
 |--------|----------|-------------|
 | `POST` | `/execute` | Execute a shell command in the user's VFS context. |
 
+###      Devices (`/api/devices`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/attach` | Attach a device for a user/scenario |
+| `GET` | `/` | List attached devices for current user/scenario |
+| `POST` | `/mount` | Mount a device to a mount point |
+| `POST` | `/unmount` | Unmount a device |
+
+###      Leaderboard (`/api/leaderboard`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Get leaderboard (users ordered by total score) |
+
+###      Tracking (`/api/tracking`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/scenario-start` | Log scenario start event |
+| `POST` | `/scenario-end` | Log scenario completion event |
+| `POST` | `/mini-game` | Log mini-game events (start/complete/fail) |
+| `POST` | `/command` | Log command execution |
+
+###      Admin (`/api/admin`) - Requires Admin Role
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/logs` | Paginated event logs with filters |
+| `GET` | `/logs/export` | Export logs as CSV |
+| `GET` | `/stats` | Aggregated statistics |
+| `GET` | `/users` | List all users with their stats |
+| `GET` | `/users/:userId/stats` | Detailed stats for a specific user |
+| `GET` | `/event-types` | Get distinct event types for filtering |
+| `GET` | `/scenario-codes` | Get distinct scenario codes for filtering |
+
 ---
 
 ## Database Schema
@@ -319,18 +421,22 @@ Stores user account information.
 - `id`: PK
 - `email`: Unique
 - `password_hash`: Bcrypt hash
+- `display_name`: User's display name
+- `role`: 'user' or 'admin'
 - `tutorial_completed`: Boolean flag
+- `created_at`: Timestamp
 
 ### `scenarios` & `tasks`
 Stores static definitions (synced from `scenarios.json`).
-- `scenarios`: `id`, `code`, `title`
-- `tasks`: `id`, `scenario_id`, `code`, `solution_value` (hashed/stored securely)
+- `scenarios`: `id`, `code`, `title`, `description`
+- `tasks`: `id`, `scenario_id`, `code`, `title`, `description`, `max_score`, `solution_type`, `solution_value`
 
 ### `task_completions`
 Tracks user progress.
 - `user_id`: FK -> users
 - `task_id`: FK -> tasks
 - `score_awarded`: Points earned
+- `time_ms`: Time taken to complete
 - `completed_at`: Timestamp
 
 ### `user_vfs_state`
@@ -340,10 +446,52 @@ Persists the simulated file system.
 - `vfs_data`: JSON blob representing the file tree
 - `cwd`: Current working directory
 
+### `user_devices`
+Tracks attached devices per user/scenario.
+- `user_id`: FK -> users
+- `scenario_code`: The active scenario
+- `device_name`: Name of the device (e.g., 'sdb')
+- `device_type`: Type ('disk' or 'remote')
+- `size`: Device size
+- `partition_name`: Partition name (e.g., 'sdb1')
+- `mounted`: Boolean flag
+- `mount_point`: Current mount point if mounted
+- `device_data`: JSON blob with device content
+
 ### `badges` & `user_badges`
 Gamification system.
-- `badges`: Definitions of achievements
-- `user_badges`: Badges earned by users
+- `badges`: `id`, `code`, `name`, `description`, `badge_points`
+- `user_badges`: `user_id`, `badge_id`, `awarded_at`
+
+### `badge_points_awarded`
+Audit trail for points awarded from badges.
+- `user_id`: FK -> users
+- `badge_id`: FK -> badges
+- `points_awarded`: Points given
+- `awarded_at`: Timestamp
+
+### `user_stats`
+Tracks user statistics like hints used.
+- `user_id`: FK -> users
+- `hints_used_count`: Total hints used
+- `scenario_hints_used`: JSON blob per scenario
+
+### `user_unlocked_hints`
+Tracks which hints users have unlocked (persistent).
+- `user_id`: FK -> users
+- `task_id`: Task identifier
+- `unlocked_at`: Timestamp
+
+### `event_log`
+Comprehensive event tracking for analytics.
+- `id`: PK
+- `participant_id`: Anonymous participant identifier
+- `user_id`: FK -> users (optional)
+- `event_type`: Type of event (e.g., 'scenario_start', 'command_execute')
+- `scenario_code`: Related scenario
+- `task_id`: Related task
+- `event_data`: JSON blob with event details
+- `created_at`: Timestamp
 
 ---
 
@@ -437,6 +585,20 @@ Completed when the user **executes a specific command** in the console.
 }
 ```
 
+#### 3       Mini-Game Task
+
+Completed when the user **successfully completes a mini-game**.
+
+```json
+{
+  "id": "task_003",
+  "title": "Analyze memory dump",
+  "details": "Complete the memory analysis challenge",
+  "checkType": "minigame",
+  "minigameType": "decryption"
+}
+```
+
 ###      How to Find Interactive Objects
 
 1. **Open the browser** and go to http://localhost:5173
@@ -490,6 +652,48 @@ window.listInteractableObjects()
 
 ---
 
+## Admin Dashboard
+
+The Admin Dashboard provides administrators with tools to monitor user activity, view statistics, and export data for research purposes.
+
+### Accessing the Dashboard
+
+1. Login with an admin account (accounts are created in `server/src/db/schema.js`)
+2. Navigate to `/admin.html`
+
+### Features
+
+**Event Logs**
+- View all tracked events with filtering by:
+  - Event type (scenario_start, command_execute, hint_request, etc.)
+  - Scenario code
+  - Participant ID
+  - User ID
+  - Date range
+- Pagination support
+- Export to CSV for analysis
+
+**Statistics Overview**
+- Total users and admins
+- Active users (last 24 hours)
+- Total events logged
+- Events by type breakdown
+- Task completions
+- Commands executed
+- Hints requested
+- 7-day activity trend
+
+**User Management**
+- List all users with their stats
+- View individual user details:
+  - Tasks completed and scores
+  - Commands executed (success/failed)
+  - Hints used
+  - Badges earned
+  - Recent activity
+
+
+
 ## Technologies
 
 ###         Frontend
@@ -517,10 +721,19 @@ window.listInteractableObjects()
 - **npm** - Package manager
 - **GitHub Pages** - Hosting
 
+###      Backend
+
+- **Node.js 16+** - Runtime
+- **Express.js** - Web framework
+- **SQLite** - Database (via `sqlite3` and `sqlite` packages)
+- **Passport.js** - Authentication
+- **bcrypt** - Password hashing
+
+
+
 ###      Versioning
 
 - **Git** - Version control
-- **Node.js 16+** - Runtime
 
 ---
 
@@ -603,4 +816,4 @@ The 3D forensic environment (`secret_lab.glb`) is based on **"Flynn's Secret Lab
 
 **       Made with Love for Digital Forensics Education**
 
-*Last updated: 2025*
+*Last updated: February 2026*
