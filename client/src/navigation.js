@@ -5,12 +5,13 @@
  * Updates based on session state.
  */
 
-import { getCurrentUser, isAuthenticated, logout, onSessionChange } from './session.js';
+import { getCurrentUser, isAuthenticated, logout, onSessionChange, isAdmin } from './session.js';
 import { show as showLoginPage } from './loginPage.js';
 import { showLeaderboard } from './leaderboard.js';
 import { showProfile } from './profile.js';
 import { PointsBadge } from './pointsBadge.js';
 import { leaderboardAPI } from './api.js';
+import { getParticipantId } from './participantId.js';
 
 // ============================================================================
 // STATE
@@ -39,6 +40,14 @@ function createNavigation() {
         <span>CyberForensics Arena</span>
       </div>
       
+      <div class="nav-participant-id" title="Your anonymous participant ID - click to copy for evaluation forms">
+        <i class="fas fa-id-badge"></i>
+        <span id="participantIdDisplay">${getParticipantId()}</span>
+        <button class="nav-participant-id__copy" id="copyParticipantId" title="Copy to clipboard">
+          <i class="fas fa-copy"></i>
+        </button>
+      </div>
+      
       <div class="main-nav__menu" id="navMenu">
         <!-- Menu items will be populated based on auth state -->
       </div>
@@ -57,10 +66,56 @@ function createNavigation() {
 
   navElement = nav;
 
+  // Setup participant ID copy button
+  setupParticipantIdCopy();
+
   // Subscribe to session changes
   onSessionChange(updateNavigation);
 
   return nav;
+}
+
+/**
+ * Setup participant ID copy functionality
+ */
+function setupParticipantIdCopy() {
+  const copyBtn = document.getElementById('copyParticipantId');
+  const displaySpan = document.getElementById('participantIdDisplay');
+  
+  if (copyBtn && displaySpan) {
+    copyBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const participantId = getParticipantId();
+      
+      try {
+        await navigator.clipboard.writeText(participantId);
+        
+        // Visual feedback
+        const originalText = displaySpan.textContent;
+        displaySpan.textContent = 'Copied!';
+        displaySpan.style.color = '#22c55e';
+        copyBtn.style.color = '#22c55e';
+        
+        setTimeout(() => {
+          displaySpan.textContent = originalText;
+          displaySpan.style.color = '';
+          copyBtn.style.color = '';
+        }, 1500);
+        
+        console.log('[Navigation] Participant ID copied to clipboard:', participantId);
+      } catch (err) {
+        console.error('[Navigation] Failed to copy participant ID:', err);
+        // Fallback: select the text
+        const range = document.createRange();
+        range.selectNodeContents(displaySpan);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    });
+  }
 }
 
 /**
@@ -77,8 +132,11 @@ function updateNavigation(state) {
   console.log('[Navigation] Updating navigation state:', state);
 
   if (state.isAuthenticated && state.user) {
-    // Authenticated state
-    menu.innerHTML = `
+    // Check if user is admin
+    const userIsAdmin = state.user.role === 'admin';
+    
+    // Build menu items - admin-only items shown only to admins
+    let menuHtml = `
       <button class="nav-btn" id="navLeaderboard" title="View Leaderboard">
         <i class="fas fa-trophy"></i>
         <span>Leaderboard</span>
@@ -87,17 +145,34 @@ function updateNavigation(state) {
         <i class="fas fa-user"></i>
         <span>Profile</span>
       </button>
-      <button class="nav-btn" id="navEditor" title="Open Scenario Editor" onclick="window.location.href='editor.html'">
-        <i class="fas fa-edit"></i>
-        <span>Editor</span>
-      </button>
     `;
+    
+    // Admin-only menu items
+    if (userIsAdmin) {
+      menuHtml += `
+        <button class="nav-btn nav-btn--admin" id="navEditor" title="Open Scenario Editor">
+          <i class="fas fa-edit"></i>
+          <span>Editor</span>
+        </button>
+        <button class="nav-btn nav-btn--admin" id="navAdminDashboard" title="Admin Dashboard">
+          <i class="fas fa-chart-line"></i>
+          <span>Dashboard</span>
+        </button>
+      `;
+    }
+    
+    menu.innerHTML = menuHtml;
 
-    // Note: Score display removed for now
+    // Build user section with role badge for admins
+    const roleBadge = userIsAdmin 
+      ? '<span class="nav-user__role nav-user__role--admin"><i class="fas fa-shield-alt"></i> Admin</span>'
+      : '';
+    
     userSection.innerHTML = `
       <div class="nav-user__info">
         <span class="nav-user__name">${escapeHtml(state.user.displayName)}</span>
         <span class="nav-user__email">${escapeHtml(state.user.email)}</span>
+        ${roleBadge}
       </div>
       <button class="nav-btn nav-btn--logout" id="navLogout" title="Logout">
         <i class="fas fa-sign-out-alt"></i>
@@ -109,6 +184,16 @@ function updateNavigation(state) {
     document.getElementById('navLeaderboard')?.addEventListener('click', () => showLeaderboard());
     document.getElementById('navProfile')?.addEventListener('click', () => showProfile());
     document.getElementById('navLogout')?.addEventListener('click', handleLogout);
+    
+    // Admin-only event listeners
+    if (userIsAdmin) {
+      document.getElementById('navEditor')?.addEventListener('click', () => {
+        window.location.href = 'editor.html';
+      });
+      document.getElementById('navAdminDashboard')?.addEventListener('click', () => {
+        window.location.href = 'admin.html';
+      });
+    }
   } else {
     // Not authenticated
     menu.innerHTML = '';
