@@ -11,6 +11,7 @@ import { getVFS, updateVFS, resolvePath, normalizePath, getNode } from '../vfs/v
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { logEvent, EventTypes } from '../services/eventLog.js';
 
 const router = express.Router();
 
@@ -58,6 +59,19 @@ router.post('/execute', authenticate, async (req, res) => {
     if (result.vfsModified) {
       await updateVFS(userId, scenarioCode, { vfs });
     }
+
+    // Log command execution event for evaluation tracking
+    await logEvent({
+      participantId: req.participantId,
+      userId,
+      eventType: EventTypes.COMMAND_EXECUTE,
+      scenarioCode,
+      eventData: {
+        command: cmd,
+        hasError: !!result.error,
+        errorMessage: result.error || null
+      }
+    });
 
     res.json({
       output: result.output || '',
