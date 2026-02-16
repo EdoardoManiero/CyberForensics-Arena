@@ -81,6 +81,11 @@ export class SignalTracingGame {
 
         const layerNodes = []; // Keep track of nodes per layer
 
+        // Randomly select which node in the target layer is the real C2
+        const targetLayerIndex = layers.findIndex(l => l.name === 'target');
+        const targetLayerCount = layers[targetLayerIndex].count;
+        const realTargetIndex = Math.floor(Math.random() * targetLayerCount);
+
         layers.forEach((layer, lIdx) => {
             const currentLayerNodes = [];
             const yStep = 400 / (layer.count + 1);
@@ -96,7 +101,7 @@ export class SignalTracingGame {
 
                 // Special handling for Target layer
                 if (layer.name === 'target') {
-                    if (i === 0) {
+                    if (i === realTargetIndex) {
                         type = 'target'; // Real C2
                         label = 'Suspicious SRV';
                         ip = this.targetIp;
@@ -131,10 +136,14 @@ export class SignalTracingGame {
 
         for (let l = 1; l < layers.length; l++) {
             const nodesInLayer = layerNodes[l];
-            // For target layer, MUST pick the real target (index 0)
-            const nextNode = (l === layers.length - 1)
-                ? nodesInLayer[0]
-                : nodesInLayer[Math.floor(Math.random() * nodesInLayer.length)];
+
+            let nextNode;
+            if (l === layers.length - 1) {
+                // For target layer, MUST pick the real target index we chose earlier
+                nextNode = nodesInLayer[realTargetIndex];
+            } else {
+                nextNode = nodesInLayer[Math.floor(Math.random() * nodesInLayer.length)];
+            }
 
             this.createLink(prevNode, nextNode, true); // True = Anomaly (C2)
             validPathNodes.push(nextNode);
@@ -167,13 +176,20 @@ export class SignalTracingGame {
                 }
             });
         }
+
+        // 5. Shuffle Links to randomize inspector order
+        // Otherwise, the valid link (created first) always appears at the top
+        for (let i = this.links.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.links[i], this.links[j]] = [this.links[j], this.links[i]];
+        }
     }
 
     createLink(sourceNode, targetNode, isC2) {
         let protocol, size, freq, jitter, anomaly;
 
         if (isC2) {
-            // C2 Traffic: Fixed size, Low jitter
+            // C2 Traffic: Fixed size, Low jitter (< 5ms)
             protocol = Math.random() > 0.5 ? 'HTTPS' : 'SSH (Enc)';
             const fixedSize = [64, 128, 256, 512][Math.floor(Math.random() * 4)];
             size = `${fixedSize}B (Fixed)`;
@@ -181,22 +197,29 @@ export class SignalTracingGame {
             jitter = Math.floor(Math.random() * 4) + 'ms'; // 0-3ms
             anomaly = true;
         } else {
-            // Normal Traffic: Variable size, High jitter
-            // OR Decoy: Looks suspicious but fails one check
-            const isDecoy = Math.random() > 0.7;
+            // Decoy Traffic Generation
+            const decoyType = Math.random();
 
             protocol = ['HTTP', 'HTTPS', 'DNS', 'FTP'][Math.floor(Math.random() * 4)];
 
-            if (isDecoy) {
-                // Decoy: Fixed size but High Jitter
+            if (decoyType > 0.6) {
+                // TYPE A: Fixed Size (looks compliant) BUT High Jitter (fails check)
+                // This is the tricky one!
                 const fixedSize = [64, 128, 256][Math.floor(Math.random() * 3)];
-                size = `${fixedSize}B (Fixed)`;
+                size = `${fixedSize}B (Fixed)`; // Looks suspicious...
                 freq = (Math.random() * 5 + 1).toFixed(1) + ' Hz';
-                jitter = Math.floor(Math.random() * 50 + 20) + 'ms'; // High jitter
-            } else {
-                // Normal
+                jitter = Math.floor(Math.random() * 45 + 10) + 'ms'; // >10ms (FAIL)
+            } else if (decoyType > 0.3) {
+                // TYPE B: Low Jitter (looks compliant) BUT Variable Size (fails check)
                 const min = 100 + Math.floor(Math.random() * 100);
                 const max = min + 500 + Math.floor(Math.random() * 1000);
+                size = `${min}-${max}B`; // Variable (FAIL)
+                freq = (Math.random() * 5 + 1).toFixed(1) + ' Hz';
+                jitter = Math.floor(Math.random() * 3) + 'ms'; // <3ms (PASS)
+            } else {
+                // TYPE C: Normal Junk (Variable Size + High Jitter)
+                const min = 200 + Math.floor(Math.random() * 200);
+                const max = min + 800 + Math.floor(Math.random() * 1000);
                 size = `${min}-${max}B`;
                 freq = (Math.random() * 20 + 5).toFixed(1) + ' Hz';
                 jitter = Math.floor(Math.random() * 40 + 10) + 'ms';
