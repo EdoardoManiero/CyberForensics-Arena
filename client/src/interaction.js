@@ -353,6 +353,12 @@ export function setupInteractions(scene, camera) {
   // E to interact with PC - emit event instead of calling toggleConsoleVisibility
   function handleEKey(event) {
     if (isTutorialGateOpen() || isLoginPageActive()) return;
+
+    // Ignore if user is typing in an input field or textarea
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+      return;
+    }
+
     if ((event.key || '').toLowerCase() !== KEY_CODES.E) return;
     if (isConsoleOpen() && isTypingInXterm()) return;
 
