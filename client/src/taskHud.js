@@ -14,7 +14,7 @@ import { isMobile } from './scene.js';
 import {
   getProgress, getScenarioData, getCurrentScenario,
   getScenarioTasks, initTaskSystem, switchScenario, switchScenarioWithIntro,
-  isTaskCompleted, showScenarioIntro
+  isTaskCompleted, showScenarioIntro, advanceTask, notifyComplete
 } from './taskManager.js';
 import { PointsBadge } from './pointsBadge.js';
 import { tasksAPI } from './api.js';
@@ -248,6 +248,21 @@ function buildTaskItem(task, index, currentIndex) {
     `;
   }
 
+  // Build flag input for CTF-style tasks (checkType === 'flag')
+  let flagInputSection = '';
+  if (isActive && task.checkType === 'flag') {
+    flagInputSection = `
+      <div class="task-flag-section">
+        <div class="task-flag-input">
+          <input type="text" class="flag-input" placeholder="Enter flag/answer..." data-task-id="${taskId}">
+          <button class="flag-submit-btn" data-task-id="${taskId}" title="Submit flag">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   const item = document.createElement('div');
   item.className = `task-item ${statusClass}`;
   item.innerHTML = `
@@ -256,6 +271,7 @@ function buildTaskItem(task, index, currentIndex) {
       <span class="task-item-title">${task.title || 'Task'}</span>
     </div>
     ${task.details ? `<div class="task-item-details">${task.details}</div>` : ''}
+    ${flagInputSection}
     ${hintSection}
   `;
 
@@ -268,6 +284,38 @@ function buildTaskItem(task, index, currentIndex) {
         e.stopPropagation();
         await handleHintClick(task, taskId);
       });
+    }
+  }
+
+  // Add event listeners for flag input (CTF-style tasks)
+  if (isActive && task.checkType === 'flag') {
+    const flagInput = item.querySelector('.flag-input');
+    const flagSubmitBtn = item.querySelector('.flag-submit-btn');
+
+    if (flagInput && flagSubmitBtn) {
+      // Submit on button click
+      flagSubmitBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const answer = flagInput.value.trim();
+        if (answer) {
+          await handleFlagSubmit(task, taskId, answer, flagInput);
+        }
+      });
+
+      // Submit on Enter key
+      flagInput.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          const answer = flagInput.value.trim();
+          if (answer) {
+            await handleFlagSubmit(task, taskId, answer, flagInput);
+          }
+        }
+      });
+
+      // Prevent click from bubbling to task item
+      flagInput.addEventListener('click', (e) => e.stopPropagation());
     }
   }
 
@@ -337,6 +385,82 @@ async function handleHintClick(task, taskId) {
     } else {
       showToast('Error', 'Failed to fetch hint. Please try again.');
     }
+  }
+}
+
+/**
+ * Handles flag/CTF-style task submission
+ * @param {Object} task - The task object
+ * @param {string} taskId - The task ID
+ * @param {string} answer - The submitted flag/answer
+ * @param {HTMLInputElement} inputElement - The input element (to clear on success)
+ */
+async function handleFlagSubmit(task, taskId, answer, inputElement) {
+  try {
+    console.log('[TaskHud] Submitting flag for task:', taskId, 'answer:', answer);
+    
+    // Disable input during submission
+    inputElement.disabled = true;
+    const submitBtn = inputElement.parentElement.querySelector('.flag-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const result = await tasksAPI.submitTask(taskId, answer);
+    console.log('[TaskHud] Flag submission result:', result);
+
+    if (result.correct) {
+      // Success - update points and advance task
+      showToast('Correct!', `+${result.scoreAwarded} points`);
+
+      // Sync points with server's authoritative total score
+      if (result.newTotalScore !== undefined) {
+        console.log('[TaskHud] Updating points to', result.newTotalScore, '(from server)');
+        PointsBadge.setPoints(result.newTotalScore);
+      }
+
+      // Handle badges if unlocked
+      if (result.badgesUnlocked && result.badgesUnlocked.length > 0) {
+        result.badgesUnlocked.forEach(badge => {
+          PointsBadge.addBadge(badge);
+        });
+
+        // Show badge toasts
+        const skillBadges = ['Hint-Free Expert', 'Speed Runner'];
+        const unlockedSkillBadges = result.badgesUnlocked.filter(badge => 
+          skillBadges.includes(badge)
+        );
+        unlockedSkillBadges.forEach(skillBadge => {
+          showToast('Badge Unlocked', skillBadge, 'badge', skillBadge, 30);
+        });
+      }
+
+      // Advance to next task
+      advanceTask();
+      
+      // Notify UI of completion
+      notifyComplete(task.title, taskId);
+
+      // Update display
+      updateDisplay();
+    } else {
+      // Incorrect answer
+      showToast('Incorrect', 'Try again!');
+      
+      // Re-enable input
+      inputElement.disabled = false;
+      if (submitBtn) submitBtn.disabled = false;
+      
+      // Clear and focus input for retry
+      inputElement.value = '';
+      inputElement.focus();
+    }
+  } catch (error) {
+    console.error('[TaskHud] Error submitting flag:', error);
+    showToast('Error', 'Failed to submit flag. Please try again.');
+    
+    // Re-enable input on error
+    inputElement.disabled = false;
+    const submitBtn = inputElement.parentElement.querySelector('.flag-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
