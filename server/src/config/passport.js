@@ -1,7 +1,6 @@
 /**
  * Passport.js configuration
  * 
- * Configures authentication strategies following professor's lab patterns.
  * Uses Local Strategy for email/password authentication with sessions.
  */
 
@@ -28,7 +27,7 @@ passport.use(new LocalStrategy(
       
       // Find user
       const user = await db.get(
-        'SELECT id, email, password_hash, display_name, tutorial_completed FROM users WHERE email = ?',
+        'SELECT id, email, password_hash, display_name, role, tutorial_completed FROM users WHERE email = ?',
         email
       );
       
@@ -49,6 +48,7 @@ passport.use(new LocalStrategy(
         id: user.id,
         email: user.email,
         displayName: user.display_name,
+        role: user.role || 'user',
         tutorialCompleted: user.tutorial_completed === 1
       });
     } catch (error) {
@@ -74,7 +74,7 @@ passport.deserializeUser(async (id, done) => {
     const db = getDb();
     
     const user = await db.get(
-      'SELECT id, email, display_name, tutorial_completed, created_at FROM users WHERE id = ?',
+      'SELECT id, email, display_name, role, tutorial_completed, created_at FROM users WHERE id = ?',
       id
     );
     
@@ -88,6 +88,7 @@ passport.deserializeUser(async (id, done) => {
       id: user.id,
       email: user.email,
       displayName: user.display_name,
+      role: user.role || 'user',
       tutorialCompleted: user.tutorial_completed === 1,
       createdAt: user.created_at
     });
