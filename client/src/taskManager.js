@@ -10,7 +10,7 @@
 import { eventBus, Events } from './eventBus.js';
 import { ScenarioIntroManager } from './ScenarioIntroManager.js';
 import { PointsBadge } from './pointsBadge.js';
-import { tasksAPI, scenariosAPI, devicesAPI } from './api.js';
+import { tasksAPI, scenariosAPI, devicesAPI, trackingAPI } from './api.js';
 import { updateNavScore } from './navigation.js';
 import { getCurrentUser } from './session.js';
 import { TaskHud } from './taskHud.js';
@@ -328,6 +328,13 @@ export async function initTaskSystem(scenarioId) {
       scenario: state.currentScenario
     });
 
+    // Log scenario start for evaluation tracking (non-blocking)
+    if (!isCompleted) {
+      trackingAPI.scenarioStart(scenarioId).catch(err => {
+        console.warn(`${LOG_PREFIX} Failed to log scenario start:`, err);
+      });
+    }
+
     console.log(`${LOG_PREFIX} Initialized scenario: "${state.currentScenario.title}" (${state.scenarioTasks.length} tasks)`);
     return true;
 
@@ -621,6 +628,13 @@ function onScenarioComplete() {
   // Get points awarded for badges (stored from last task submission)
   const pointsAwarded = state.lastBadgePointsAwarded || 0;
   state.lastBadgePointsAwarded = 0; // Reset after use
+
+  // Log scenario end for evaluation tracking (non-blocking)
+  const completedTasksCount = state.scenarioTasks.length;
+  const totalTasksCount = state.scenarioTasks.length;
+  trackingAPI.scenarioEnd(scenarioId, completedTasksCount, totalTasksCount, pointsAwarded).catch(err => {
+    console.warn(`${LOG_PREFIX} Failed to log scenario end:`, err);
+  });
 
   // Emit event for UI layer to display notification
   eventBus.emit(Events.SCENARIO_COMPLETED, {
