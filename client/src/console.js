@@ -21,7 +21,7 @@ import {
   storeBadgePointsAwarded
 } from './taskManager.js';
 import { eventBus, Events } from './eventBus.js';
-import { consoleAPI, tasksAPI, devicesAPI } from './api.js';
+import { consoleAPI, tasksAPI, devicesAPI, trackingAPI } from './api.js';
 import { PointsBadge } from './pointsBadge.js';
 import { updateNavScore } from './navigation.js';
 import { TaskHud } from './taskHud.js';
@@ -191,9 +191,9 @@ const VFSManager = {
     // If the path's parent directory was just listed, we know if this entry exists
     const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
     const basename = path.split('/').pop();
-    if (this._lastDirCache.path === parentPath && 
-        this._lastDirCache.scenarioCode === scenarioCode &&
-        this._lastDirCache.entries.has(basename)) {
+    if (this._lastDirCache.path === parentPath &&
+      this._lastDirCache.scenarioCode === scenarioCode &&
+      this._lastDirCache.entries.has(basename)) {
       // Entry exists in cached directory listing - assume it's a directory
       // (files would typically have extensions, and this is for autocomplete trailing slash)
       return 'dir';
@@ -311,6 +311,15 @@ function registerCustomCommands(customCommands) {
           }
 
           try {
+            // Get current scenario for tracking
+            const currentScenario = getCurrentScenario();
+            const scenarioCode = currentScenario?.id;
+
+            // Log mini-game start for evaluation tracking
+            trackingAPI.miniGame(scenarioCode, cmd.gameType, 'start').catch(err => {
+              console.warn('[Console] Failed to log mini-game start:', err);
+            });
+
             // Timeout to prevent hanging (60s)
             const timeoutId = setTimeout(() => {
               reject(new Error('Command timed out (60s).'));
@@ -318,6 +327,12 @@ function registerCustomCommands(customCommands) {
 
             miniGameManager.startGame(gameInstance, (success) => {
               clearTimeout(timeoutId);
+
+              // Log mini-game result for evaluation tracking
+              trackingAPI.miniGame(scenarioCode, cmd.gameType, success ? 'complete' : 'fail', success).catch(err => {
+                console.warn('[Console] Failed to log mini-game result:', err);
+              });
+
               if (success) {
                 resolve(output || 'Access Granted.');
               } else {
@@ -331,6 +346,20 @@ function registerCustomCommands(customCommands) {
       });
     } else {
       registerCommand(cmdName, (args) => {
+        // Handle commands that require specific arguments with validArgs lookup
+        if (cmd.requiresArgs && cmd.validArgs) {
+          const argsKey = args.join(' ');
+          if (args.length === 0) {
+            // No args provided - show usage/help output
+            return output || `Usage: ${cmdName} <args>`;
+          } else if (cmd.validArgs[argsKey]) {
+            // Exact match found in validArgs
+            return cmd.validArgs[argsKey];
+          } else {
+            // Args provided but not valid - show error with usage
+            return `${cmdName}: invalid arguments\n${output || ''}`;
+          }
+        }
         // Support for simple templating: {arg0}, {arg1}, etc.
         let result = output;
         args.forEach((arg, idx) => {
@@ -825,8 +854,20 @@ const InputHandler = {
 // Executes commands - calls backend API or local handlers for non-VFS commands
 const CommandExecutor = {
   async execute(line) {
+    const safePrompt = () => {
+      try {
+        TerminalUI.prompt();
+        setTimeout(() => TerminalState.term.focus(), 0);
+      } catch (e) {
+        console.error('[Console] Failed to show prompt:', e);
+      }
+    };
+
     const { cmd, args, redir } = Parser.parse(line);
-    if (!cmd) return;
+    if (!cmd) {
+      safePrompt();
+      return;
+    }
 
     eventBus.emit(Events.TUTORIAL_COMMAND_TYPED, { command: cmd });
 
@@ -837,7 +878,7 @@ const CommandExecutor = {
     const scenarioCode = currentScenario?.id;
 
     // Commands that need backend VFS access (including forensic commands)
-    const vfsCommands = ['ls', 'cd', 'pwd', 'cat', 'grep', 'mkdir', 'touch', 'rm', 'sha256sum', 'dd', 'cp'];
+    const vfsCommands = ['ls', 'cd', 'pwd', 'cat', 'grep', 'mkdir', 'touch', 'rm', 'sha256sum', 'dd', 'cp', 'fsstat', 'blkcat', 'foremost', 'xxd', 'stat', 'fls'];
 
     // Check if this is a VFS command and we have a scenario
     if (vfsCommands.includes(cmd) && scenarioCode) {
@@ -891,6 +932,7 @@ const CommandExecutor = {
       return;
     }
 
+    let hasError = false;
     try {
       let out = handler(args);
       // Handle both sync and async handlers
@@ -903,7 +945,19 @@ const CommandExecutor = {
       // Check task completion for local commands too
       await TaskManager.checkCompletion(cmd, args);
     } catch (err) {
+      hasError = true;
       TerminalUI.writeLine(`Errore: ${err.message || err}`);
+    }
+
+    // Log local command execution to server for tracking
+    // This ensures commands like lsblk, mount, etc. are tracked
+    if (scenarioCode) {
+      try {
+        await trackingAPI.logCommand(scenarioCode, cmd, hasError);
+      } catch (trackingError) {
+        // Don't fail command execution if tracking fails
+        console.warn('[Console] Failed to log command:', trackingError);
+      }
     }
 
     // Show prompt after command completes
@@ -997,15 +1051,23 @@ const TaskManager = {
         let answer = task.checkCommand;
         if (task.checkArgs && task.checkArgs.length > 0) {
           // Quote arguments that contain spaces so server can parse them correctly
-          const quotedArgs = task.checkArgs.map(arg => 
+          const quotedArgs = task.checkArgs.map(arg =>
             arg.includes(' ') ? `"${arg}"` : arg
           );
           answer += ' ' + quotedArgs.join(' ');
         }
 
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d7f2affb-5189-4352-bd9b-6f1d6c1e402f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'console.js:notifyCompletion', message: 'Submitting task to backend', data: { taskId: task.id, checkCommand: task.checkCommand, checkArgs: task.checkArgs, builtAnswer: answer, checkType: task.checkType }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H2-H5' }) }).catch(() => { });
+        // #endregion
+
         console.log('[Console] Submitting task', task.id, 'with answer:', answer);
         const result = await tasksAPI.submitTask(task.id, answer);
         console.log('[Console] Task submission result:', result);
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d7f2affb-5189-4352-bd9b-6f1d6c1e402f', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'console.js:notifyCompletion:result', message: 'Got backend result', data: { taskId: task.id, resultCorrect: result.correct, resultSuccess: result.success }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H2-H5' }) }).catch(() => { });
+        // #endregion
 
         if (result.correct) {
           shouldAdvance = true;
@@ -1258,7 +1320,7 @@ function registerBuiltinCommands() {
     // Parse mount options (-o ro for read-only)
     let device, mountPoint;
     let readOnly = false;
-    
+
     if (args[0] === '-o' && args[1] === 'ro') {
       // mount -o ro <device> <mountpoint>
       if (args.length < 4) {
@@ -1288,10 +1350,10 @@ function registerBuiltinCommands() {
 
     // Check if this is a forensic image or regular device
     const isForensicImage = device.startsWith('/forensic/') && device.endsWith('.img');
-    
+
     // Update local cache
     const devices = window.attachedDevices || [];
-    
+
     if (!isForensicImage) {
       const deviceName = device.replace('/dev/', '').replace(/1$/, '');
       for (const dev of devices) {
@@ -1320,18 +1382,18 @@ function registerBuiltinCommands() {
     // Get device content from server result or local cache
     const devicesResult = await devicesAPI.getDevices(scenarioCode);
     // For forensic images, get the most recently attached device's content
-    const serverDevice = isForensicImage 
+    const serverDevice = isForensicImage
       ? devicesResult.devices?.[devicesResult.devices.length - 1]
       : devicesResult.devices?.find(d => d.name === device.replace('/dev/', '').replace(/1$/, ''));
-      
+
     if (serverDevice && serverDevice.content && current.children) {
       for (const [name, data] of Object.entries(serverDevice.content)) {
         current.children[name] = VFSManager.makeFile(data);
       }
     }
 
-    const mountMsg = readOnly 
-      ? `Mounted ${device} on ${mountPoint} (read-only)` 
+    const mountMsg = readOnly
+      ? `Mounted ${device} on ${mountPoint} (read-only)`
       : `Mounted ${device} on ${mountPoint}`;
     return result.message || mountMsg;
   });
@@ -1490,9 +1552,87 @@ export function initConsole() {
   } catch (err) {
     console.error('Failed to initialize console:', err);
   }
+
+  // Draggable logic
+  const consoleContainer = document.getElementById('consoleContainer');
+  const consoleHeader = document.getElementById('consoleHeader');
+  let isDragging = false;
+  let currentX;
+  let currentY;
+  let initialX;
+  let initialY;
+  let xOffset = 0;
+  let yOffset = 0;
+
+  if (consoleContainer && consoleHeader) {
+    consoleHeader.addEventListener("mousedown", dragStart);
+    document.addEventListener("mouseup", dragEnd);
+    document.addEventListener("mousemove", drag);
+  }
+
+  function dragStart(e) {
+    // Ignore clicks on close button (or any button)
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+    initialX = e.clientX - xOffset;
+    initialY = e.clientY - yOffset;
+
+    // Only allow dragging from header
+    if (e.target === consoleHeader || consoleHeader.contains(e.target)) {
+      isDragging = true;
+    }
+  }
+
+  function dragEnd(e) {
+    initialX = currentX;
+    initialY = currentY;
+    isDragging = false;
+  }
+
+  function drag(e) {
+    if (isDragging) {
+      e.preventDefault();
+      currentX = e.clientX - initialX;
+      currentY = e.clientY - initialY;
+
+      xOffset = currentX;
+      yOffset = currentY;
+
+      setTranslate(currentX, currentY, consoleContainer);
+    }
+  }
+
+  function setTranslate(xPos, yPos, el) {
+    // We need to keep the centering transform active if we are using it, 
+    // but here we are using offsets.
+    // The CSS has `transform: translate(-50%, -50%)` which centers it.
+    // To move it relative to that, we can append translate(x, y) 
+    // OR we can switch to absolute positioning without transform centering once dragged.
+    // Let's try appending.
+    el.style.transform = `translate(calc(-50% + ${xPos}px), calc(-50% + ${yPos}px))`;
+  }
+
+  // Resize Observer for fitAddon
+  // Observe the terminal container itself, not the outer window
+  const terminalContainer = document.getElementById('terminal');
+  if (terminalContainer) {
+    const resizeObserver = new ResizeObserver(() => {
+      if (TerminalState.fitAddon) {
+        // Wrap in requestAnimationFrame to ensure layout is settled
+        requestAnimationFrame(() => {
+          try {
+            TerminalState.fitAddon.fit();
+          } catch (e) {
+            console.warn('Fit error:', e);
+          }
+        });
+      }
+    });
+    resizeObserver.observe(terminalContainer);
+  }
 }
 
-// NOTE: HUD updates are now handled via event bus
+// NOTE: HUD updates are  handled via event bus
 // showTaskHUD() and hideTaskHUD() are removed - HUD listens to PROGRESS_UPDATED events
 
 console.log('Console loaded (task system managed by taskManager.js)');
